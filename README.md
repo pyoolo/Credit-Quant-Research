@@ -1,12 +1,8 @@
-# Quant Research
+# Credit Quant Research
 
 A working portfolio of quantitative-finance research projects, with a focus on
 **credit and fixed income**. Each project is self-contained — its own code, tests,
 and (where relevant) a short write-up — and is meant to be read, run, and built on.
-
-> Maintained by **Paolo Mastrogiacomo** · credit / FI quant track.
-> Background: MSc Financial Engineering (EDHEC); credit/FI experience across a
-> €1bn+ bond fund, an EM/HY portfolio, and commodity markets.
 
 ## Projects
 
