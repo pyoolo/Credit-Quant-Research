@@ -1,0 +1,15 @@
+# Core runtime
+numpy>=1.24
+pandas>=2.0
+scipy>=1.10
+scikit-learn>=1.3
+openpyxl>=3.1
+
+# App layer (optional: pip install -e ".[app]")
+streamlit>=1.30
+
+# Plotting for diagnostics (optional: pip install -e ".[viz]")
+matplotlib>=3.7
+
+# Bloomberg access is provided by the terminal's `bql` package, which is NOT on
+# PyPI. The fetch steps require it; everything else runs without it.
