@@ -1,0 +1,130 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,booktabs,hyperref}
+\usepackage{parskip}
+
+\title{Pricing AT1 Contingent Convertibles as a Contingent Claim on Bank Capital}
+\author{Credit Quant Research --- \texttt{at1-coco-pricer}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We price a perpetual, non-cumulative Additional Tier~1 (AT1) instrument by
+taking the issuer's Common Equity Tier~1 (CET1) ratio as the single state
+variable. Every AT1 contingency---mechanical loss absorption, resolution
+(Point-of-Non-Viability), coupon cancellation via the Maximum Distributable
+Amount, and issuer call/extension---is a functional of that ratio, so a
+capital-driven Monte-Carlo delivers mutually consistent trigger, coupon and
+extension risk from one simulation. We describe the dynamics, the cash-flow
+map, the risk-measure computation, and the calibration caveats.
+\end{abstract}
+
+\section{Instrument}
+An AT1 CoCo is a perpetual, deeply subordinated bank instrument. It pays a
+fixed coupon to a first call date (typically five years), after which the coupon
+resets to a reference rate plus a contractual spread. Three features make it not
+a bond:
+\begin{enumerate}
+  \item \textbf{Loss absorption.} If CET1 falls to a contractual trigger
+  $c_{\text{trig}}$ (5.125\% or 7\%), the principal is written down or converted
+  to equity. Resolution authorities may also impose loss at the Point of
+  Non-Viability (PONV) before any mechanical trigger.
+  \item \textbf{Coupon cancellation.} Coupons are discretionary and
+  non-cumulative. Once CET1 enters the \emph{combined buffer requirement},
+  CRD~IV caps distributions through the Maximum Distributable Amount (MDA).
+  \item \textbf{Extension risk.} The instrument is perpetual; the investor
+  relies on the issuer's economic incentive to call. Weak issuers---for whom
+  refinancing is expensive---rationally extend, precisely when the investor
+  least wants them to.
+\end{enumerate}
+
+\section{State dynamics}
+Let $C_t$ denote the CET1 ratio in percentage points. Under the pricing measure
+we model
+\begin{equation}
+  dC_t = \kappa(\theta - C_t)\,dt + \sigma\,dW_t - J_t\,dN_t,
+\end{equation}
+where $N_t$ is a Poisson process with intensity $\lambda_J$ (stress events) and
+each jump $J_t>0$ is lognormal with median $m_J$ and log-volatility $\sigma_J$,
+representing a \emph{downward} capital shock. Mean reversion to the target
+$\theta$ stands in for management's capital planning and retained earnings;
+upward jumps are deliberately absent, since recapitalisation is gradual whereas
+losses are sudden.
+
+Two absorption times are recorded per path: the mechanical time
+$\tau_m=\inf\{t: C_t \le c_{\text{trig}}\}$ and an independent PONV time with
+constant hazard $\lambda_{\text{PONV}}$. Absorption is
+$\tau=\min(\tau_m,\tau_{\text{PONV}})$.
+
+\section{Coupon cancellation via the MDA}
+Let $b$ be the MDA floor (total capital requirement) and $w$ the combined-buffer
+width. The maximum distributable fraction follows the CRD~IV quartile ladder in
+the buffer $[b,\,b+w]$:
+\[
+  \phi(C)=
+  \begin{cases}
+    1.0 & C \ge b+w,\\
+    0.6 & C \in [b+0.75w,\,b+w),\\
+    0.4 & C \in [b+0.50w,\,b+0.75w),\\
+    0.2 & C \in [b+0.25w,\,b+0.50w),\\
+    0.0 & C < b+0.25w.
+  \end{cases}
+\]
+The coupon paid on a live date is $\phi(C_t)$ times the scheduled coupon. This
+makes coupon-cancellation risk endogenous: it emerges from the same paths that
+generate trigger risk, and a \emph{wider} buffer requirement raises the hurdle
+for full coupons---an adverse feature for the holder, recovered as a negative
+buffer sensitivity in \S\ref{sec:risk}.
+
+\section{Call and extension}
+At each call date the issuer compares the cost of keeping the (reset) coupon,
+$s_{\text{reset}}$, with the spread at which it could reissue,
+\begin{equation}
+  s_{\text{refi}}(C) = s_0 + \beta \max\bigl(0,\;(b+w) - C\bigr),
+\end{equation}
+and calls iff $s_{\text{reset}} > s_{\text{refi}}(C)$. Because
+$s_{\text{refi}}$ \emph{widens} as capital erodes, a distressed issuer faces a
+prohibitive refinancing cost and extends---the empirically observed behaviour
+and the source of extension risk in the valuation.
+
+\section{Valuation}
+The price is the risk-neutral expectation of discounted cash flows under a flat
+continuously-compounded curve $r$:
+\begin{equation}
+  V_0 = \mathbb{E}\!\left[
+    \sum_{t_i < \tau \wedge \tau_c} \phi(C_{t_i})\,c(t_i)\,e^{-r t_i}
+    \;+\; \mathbf{1}_{\{\tau_c \le \tau\}} F\,e^{-r\tau_c}
+    \;+\; \mathbf{1}_{\{\tau < \tau_c\}} R\,F\,e^{-r\tau}
+  \right],
+\end{equation}
+where $\tau_c$ is the (rational) call time, $F$ the face, $R$ the recovery on
+absorption, and $c(t_i)$ the scheduled coupon (initial before the first call,
+reset thereafter). Paths surviving to the horizon receive an analytic perpetuity
+tail $c_{\text{reset}}F/y$ at a tail yield $y$, immaterial once the horizon is
+long relative to $r$.
+
+\section{Risk}\label{sec:risk}
+Sensitivities are computed by central-difference bump-and-reprice under
+\emph{common random numbers}: the same primitive draws price the base and bumped
+scenarios, cancelling Monte-Carlo noise so the finite difference is stable at
+moderate path counts. The engine reports $\partial V/\partial C_0$ (capital
+delta), $\partial V/\partial\sigma$ (vega), sensitivities to $\lambda_J$ and
+$\lambda_{\text{PONV}}$, the discount-rate DV01, and sensitivities to
+$c_{\text{trig}}$ and the buffer width. It also returns the cumulative
+absorption term structure $\Pr(\tau\le t)$ and the loss distribution
+(expected loss, VaR, ES) of the discounted payoff.
+
+\section{Calibration caveat}
+CET1 is not a traded asset, so the state dynamics cannot be calibrated by
+replication alone. In practice one anchors $\theta,\sigma,\lambda_J$ to the
+issuer's capital plan and stress history (a real-world view), then adjusts the
+hazards and recovery so that model prices match observed AT1 spreads and call
+behaviour (a pricing view). This measure change is an identification gap, not a
+free parameter: it should be stated, stress-tested, and---ideally---disciplined
+by a cross-section of the issuer's instruments. The companion code ships with a
+synthetic ground-truth generator so every estimator is checked against a known
+answer before any market calibration.
+
+\end{document}
