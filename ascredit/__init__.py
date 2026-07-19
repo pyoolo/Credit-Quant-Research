@@ -32,5 +32,3 @@ __all__ = [
     "monte_carlo",
     "__version__",
 ]
-
-# Test commit del 18 luglio 2026
