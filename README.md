@@ -8,8 +8,9 @@ A working portfolio of quantitative-finance research projects, with a focus on *
 |---|---|---|
 | [bayesian-credit-updating](./bayesian-credit-updating) | Frames conditional credit pricing as Bayesian default updating: a spread-implied prior revised by signal likelihood ratios, with explicit handling of the correlation between signals (where naïve independence overstates risk). Includes a hierarchical Bayesian model and an out-of-sample calibration backtest. | Python, PyMC, scikit-learn, LaTeX |
 | [convertible-bond-pricer](./convertible-bond-pricer) | Prices convertible bonds under the Tsiveriotis–Fernandes (1998) model and a Black–Scholes benchmark. Solves two coupled PDEs on a trinomial tree; handles coupons, call/put schedules. Characterises the three pricing regimes (equity / balanced / distressed) where TF and BS agree or diverge, using 200 synthetic scenarios. | Python, NumPy, SciPy, Matplotlib, LaTeX |
-| [political-option-sovereign-debt](./political-option-sovereign-debt) | Prices defaulted sovereign bonds as political contingent claims: a distressed floor plus an embedded digital option on a sovereign-level political normalization event. Inverts observed prices into implied normalization probabilities, bootstraps a piecewise-constant hazard term structure across maturities, tests the cross-maturity monotonicity restriction V(t), runs event studies around political shocks, and falsifies the macro-financial channel with HAC regressions. Companion code to a working paper on Venezuela's post-2017 default; ships a synthetic DGP with known ground truth so every estimator is validated against simulated truth. | Python, NumPy, pandas, statsmodels, Matplotlib, pytest |
+| [political-option-sovereign-debt](./political-option-sovereign-debt) | Prices defaulted sovereign bonds as political contingent claims: a distressed floor plus an embedded digital option on a sovereign-level political maturities, tests the cross-maturity monotonicity restriction ψ(t), runs event studies around political shocks, and falsifies the macro-financial channel with HAC regressions. Companion code to a working paper on Venezuela's post-2017 default; ships a synthetic DGP with known ground truth so every estimator is validated against simulated truth. | Python, statsmodels, Matplotlib, pytest |
 | [at1-coco-pricer](./at1-coco-pricer) | Prices perpetual AT1 contingent convertibles (CoCos) as a contingent claim on the issuer's CET1 ratio. A single simulated capital path drives, jointly, mechanical loss absorption (contractual trigger), regulatory absorption (PONV hazard), endogenous coupon cancellation through the CRD-IV Maximum Distributable Amount buffer, and rational call/extension (refinancing cost widens as capital erodes). Monte-Carlo valuation with common-random-number Greeks, an absorption term structure, and a discounted-payoff loss distribution (VaR/ES). | Python, NumPy, pandas, Matplotlib, pytest |
+| [nlp-credit-early-warning](./nlp-credit-early-warning) | Early-warning NLP for HY credit, validated on a falsifiable synthetic design: three worlds share bit-identical latent states, defaults, spreads and fundamentals, and differ only in what the management-report text encodes — a genuine pipeline lead, a coincident echo of the market's own information (the tautology trap), or pure noise. A discrete-time hazard model (Shumway 2001) with purged/embargoed walk-forward and a quarter-block bootstrap must find the incremental signal where it exists and nothing where it doesn't — which it does (ΔAUC +0.007, 90% CI excludes zero) while a coincident-text control adds exactly zero given the spread. | Python, scikit-learn, pandas, Matplotlib, pytest |
 
 ## Roadmap
 
@@ -19,32 +20,39 @@ Planned additions (same self-contained format):
 - **hazard-rate-toolkit** — bootstrap survival/default curves from CDS quotes (QuantLib / FinancePy); map posterior PDs back to fair spreads.
 - **rating-migration-markov** — estimate and simulate corporate rating-transition matrices; link migration to default.
 - **prob-bayes-notes** — the theoretical framework (probability, Bayes, and beyond) that underpins the applied work.
-- **political-option extensions** — multi-event catalogue (2017–2026) for aggregated CARs, and bond-specific recovery estimation (sovereign vs. PDVSA seniority) within the contingent-claim framework.
+- **political-option-extensions** — multi-event catalogue (2017–2026) for aggregated CARs, and bond-specific recovery estimation (sovereign vs. PDVSA seniority) within the contingent-claim framework.
 - **at1-coco extensions** — a fully coupled equity process for genuine conversion (rather than a recovery-fraction proxy), and a multi-issuer calibration that disciplines the CET1 dynamics against a cross-section of each bank's AT1 spreads.
+- **nlp-credit-early-warning extensions** — a licensed Loughran–McDonald lexicon in place of the illustrative word list, a real-document pilot (issuer filings) subject to the same PIT and purging discipline, and a sensitivity sweep mapping the signal-strength parameter to the detectable ΔAUC.
 
 ## Layout
 
 ```
 quant-research/
-├── README.md                          ← this index
-├── LICENSE                            ← MIT (covers all projects)
+├── README.md                     ← this index
+├── LICENSE                       ← MIT (covers all projects)
 ├── .gitignore
-├── bayesian-credit-updating/          ← project 1 (self-contained)
+├── bayesian-credit-updating/     ← project 1 (self-contained)
 │   ├── README.md
 │   ├── src/ tests/ scripts/ paper/
 │   └── pyproject.toml
-├── convertible-bond-pricer/           ← project 2 (self-contained)
+├── convertible-bond-pricer/      ← project 2 (self-contained)
 │   ├── README.md
 │   ├── src/ tests/ scripts/ paper/
 │   └── pyproject.toml
-├── political-option-sovereign-debt/   ← project 3 (self-contained)
+├── political-option-sovereign-debt/  ← project 3 (self-contained)
 │   ├── README.md
 │   ├── src/ tests/ scripts/ data/ results/
 │   └── pyproject.toml
-└── at1-coco-pricer/                   ← project 4 (self-contained)
+├── at1-coco-pricer/               ← project 4 (self-contained)
+│   ├── README.md
+│   ├── src/ tests/ scripts/ paper/ results/
+│   └── pyproject.toml
+└── nlp-credit-early-warning/      ← project 5 (self-contained)
     ├── README.md
-    ├── src/ tests/ scripts/ paper/ results/
-    └── pyproject.toml
+    ├── synthcredit/ tests/ docs/
+    ├── run_experiment.py
+    ├── run_tests.py
+    └── requirements.txt
 ```
 
 Each project installs and runs independently; see its own `README.md`.
