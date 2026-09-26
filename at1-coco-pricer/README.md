@@ -20,6 +20,11 @@ The result is a valuation in which price, coupon-cancellation probability, and
 loss-absorption probability all move together off one economically meaningful
 driver.
 
+**Case study → [RESEARCH.md](RESEARCH.md):** the model calibrated to BNP Paribas's
+three USD AT1s (Capital IQ prices, CET1 history, EBA stress test). One implied
+PONV hazard (~2.35%/yr) fits all three bonds within ~0.1 points, and making the
+refinancing spread stochastic improves the fit to extension risk.
+
 ## Why this framing
 
 An AT1 is not a bond with an option stapled on; it is a bundle of options the
@@ -54,11 +59,16 @@ at1-coco-pricer/
 │   ├── processes.py     ← CET1 jump-diffusion + trigger/PONV times
 │   ├── instrument.py    ← AT1 term sheet + MDA schedule
 │   ├── pricer.py        ← Monte-Carlo cash-flow engine
-│   └── risk.py          ← CRN Greeks, absorption term structure, loss dist.
-├── tests/               ← 17 tests (dynamics, MDA, pricing, risk signs)
+│   ├── risk.py          ← CRN Greeks, absorption term structure, loss dist.
+│   └── market.py        ← dated bonds, stochastic refi spread, implied PONV
+├── tests/               ← 23 tests (dynamics, MDA, pricing, risk signs, market)
 ├── scripts/
 │   ├── price_example.py
-│   └── trigger_term_structure.py
+│   ├── trigger_term_structure.py
+│   ├── build_dataset.py     ← Capital IQ exports -> tidy CSVs
+│   ├── market_analysis.py   ← capital and price analysis
+│   └── calibrate_bnp.py     ← implied PONV and cross-bond test
+├── data/                ← term sheets + public data (CIQ data kept local)
 └── results/             ← generated figures
 ```
 

@@ -1,0 +1,8 @@
+component,pct,layer,note
+Pillar 1,4.50,floor,mda_threshold part
+Pillar 2 requirement (CET1 part),1.14,floor,mda_threshold part
+Capital conservation buffer,2.50,combined_buffer,
+G-SIB buffer,1.50,combined_buffer,O-SII buffer rises to 2.0% (+25bp 1-Jan-2027; +25bp 1-Jan-2028) and the higher of G-SIB/O-SII applies
+Countercyclical buffer,0.73,combined_buffer,varies with exposures and national CCyB rates
+Systemic risk buffer,0.14,combined_buffer,
+Total,10.51,,as at 30-Sep-2025 (BNP AT1 presentation Dec-2025); 10.43% at 30-Jun-2026 without published breakdown

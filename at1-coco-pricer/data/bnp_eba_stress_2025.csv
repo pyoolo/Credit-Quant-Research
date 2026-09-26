@@ -1,0 +1,4 @@
+measure,actual_2024,baseline_2025,baseline_2026,baseline_2027,adverse_2025,adverse_2026,adverse_2027,min_adverse,max_depletion_pp
+cet1_fully_loaded_pct,12.87,11.40,11.62,11.54,8.66,8.85,8.88,8.66,4.21
+cet1_transitional_pct,12.87,12.73,13.00,12.95,9.31,9.43,9.49,9.31,3.56
+leverage_fully_loaded_pct,4.62,4.81,4.91,4.90,3.86,3.95,3.98,3.86,0.76
