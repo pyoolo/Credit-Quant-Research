@@ -68,3 +68,19 @@ def test_conversion_recovery_capped_at_par(randoms):
     mkt = MarketState(MKT.val_date, 94.0, 0.05, 0.05, 0.027, 13.0, 10_000.0)
     prof = cash_flow_profile(BOND, mkt, _ms(), randoms)
     assert prof.diagnostics["recovery"] == 1.0
+
+
+def test_issuer_call_option_costs_the_investor(randoms):
+    # the issuer's option to extend can only lower the investor's value
+    from dataclasses import replace
+    ms = _ms(0.01)
+    lam, _ = implied_ponv(BOND, MKT, ms, randoms)
+    r = cont_rate(MKT.discount_yield)
+    p_model = cash_flow_profile(BOND, MKT, ms, randoms).dirty_price(r, lam)
+    p_first = cash_flow_profile(BOND, MKT, ms, randoms, call_rule="first").dirty_price(r, lam)
+    assert p_first >= p_model
+    # a capital shock that crosses the MDA threshold costs more than one that does not
+    p_small = cash_flow_profile(BOND, replace(MKT, cet1=11.5), ms, randoms).dirty_price(r, lam)
+    p_big = cash_flow_profile(BOND, replace(MKT, cet1=9.0), ms, randoms).dirty_price(r, lam)
+    assert p_model > p_small > p_big
+    assert (p_small - p_big) > (p_model - p_small)

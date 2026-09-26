@@ -16,11 +16,17 @@ Real bonds need four extra things, all handled here:
    shares at max(current price, floor).  Recovery is
    ``min(1, S_trigger / floor)`` with ``S_trigger`` a stressed share price.
 
-PONV is an independent constant hazard ``lambda``.  Instead of simulating it,
-the engine prices it *analytically*: every cash flow at time t is multiplied by
-``exp(-lambda t)`` (conditional Monte Carlo).  This removes all Monte-Carlo
-noise in the lambda direction, so the price is smooth and monotone in lambda
-and the implied hazard can be solved with a root finder on one set of paths.
+5. **PONV hazard linked to the spread.**  The regulatory write-down hazard is
+   ``lambda * s_t / s_0``: proportional to the issuer's simulated AT1 spread
+   (market part + capital add-on).  It therefore rises when spreads widen or
+   capital erodes, which is exactly when the issuer extends, so extension is
+   valued consistently with the call decision.  ``lambda`` is today's hazard.
+
+PONV is not simulated as an event: cash flows are discounted by
+``exp(-r t - lambda * int_0^t s_u/s_0 du)`` path by path (conditional Monte
+Carlo).  This removes all Monte-Carlo noise in the lambda direction, so the
+price is smooth and monotone in lambda and the implied hazard is solved with a
+root finder on one set of paths.
 """
 
 from __future__ import annotations
@@ -130,39 +136,47 @@ class ModelSettings:
     combined_buffer: float = 4.87    # CBR
     share_stress: float = 0.20       # share price at trigger as fraction of today's
     ponv_recovery: float = 0.0
+    hazard_linked: bool = True       # PONV hazard proportional to the simulated AT1 spread
     horizon: float = 40.0
     dt: float = 1.0 / 12.0
 
 
 # ---------------------------------------------------------------------------
-# simulation: expected cash-flow profile (lambda-free)
+# simulation: path-wise cash flows, priced for any hazard level
 # ---------------------------------------------------------------------------
 @dataclass
 class CashFlowProfile:
-    """Path-averaged cash flows; pricing any lambda is then a dot product."""
+    """Path-wise cash flows plus the integrated hazard driver on each path.
 
-    t_cpn: np.ndarray
-    e_cpn: np.ndarray           # E[coupon paid at t_cpn]
-    t_grid: np.ndarray
-    e_call: np.ndarray          # E[redemption at 100] on the grid
-    e_trig: np.ndarray          # E[conversion recovery] on the grid
-    e_end: np.ndarray           # P(life ends at grid time), for PONV recovery term
-    p_survive: float
+    With ``hazard_linked`` the PONV hazard on a path is
+    ``lam * s_t / s_0`` where ``s_t`` is the issuer's simulated AT1 spread
+    (market OU part + capital add-on).  ``lam`` is therefore *today's* hazard,
+    and the hazard rises when spreads widen or capital erodes, which is exactly
+    when the issuer extends.  Without it the hazard is the constant ``lam``.
+    Either way discounting is analytic in ``lam``: DF = exp(-r t - lam * I_t),
+    with ``I_t`` the integral of ``s_u / s_0`` (or of 1).
+    """
+
+    t_cpn: np.ndarray          # (n_cpn,)
+    cpn: np.ndarray            # (paths, n_cpn) coupon actually paid
+    i_cpn: np.ndarray          # (paths, n_cpn) integrated hazard driver
+    t_end: np.ndarray          # (paths,) time of redemption / conversion / horizon
+    pay_end: np.ndarray        # (paths,) amount paid at t_end (tail value handled separately)
+    i_end: np.ndarray          # (paths,)
+    survive: np.ndarray        # (paths,) bool: alive at the horizon
     tail_coupon: float
+    tail_driver: np.ndarray    # (paths,) hazard driver at the horizon (for the tail)
     diagnostics: dict
 
     def dirty_price(self, r_cont: float, lam: float, ponv_recovery: float = 0.0,
                     notional: float = 100.0) -> float:
-        k = r_cont + lam
-        pv = self.e_cpn @ np.exp(-k * self.t_cpn)
-        pv += (self.e_call + self.e_trig) @ np.exp(-k * self.t_grid)
-        H = self.t_grid[-1]
-        pv += self.p_survive * (self.tail_coupon / k) * np.exp(-k * H)
-        if ponv_recovery > 0 and lam > 0:
-            # E[ int_0^T_end lam e^{-k s} ds ] * R * N
-            cum = lam / k * (1 - np.exp(-k * self.t_grid))
-            pv += ponv_recovery * notional * (self.e_end @ cum + self.p_survive * cum[-1])
-        return float(pv)
+        if ponv_recovery:
+            raise NotImplementedError("PONV recovery > 0 is not supported with path-wise hazards")
+        pv = (self.cpn * np.exp(-r_cont * self.t_cpn[None, :] - lam * self.i_cpn)).sum(axis=1)
+        pv += self.pay_end * np.exp(-r_cont * self.t_end - lam * self.i_end)
+        tail = self.tail_coupon / (r_cont + lam * self.tail_driver)
+        pv += np.where(self.survive, tail * np.exp(-r_cont * self.t_end - lam * self.i_end), 0.0)
+        return float(pv.mean())
 
 
 def spread_paths(randoms: Randoms, sp: SpreadParams, s0: float, dt: float, n_steps: int) -> np.ndarray:
@@ -185,7 +199,20 @@ def spread_paths(randoms: Randoms, sp: SpreadParams, s0: float, dt: float, n_ste
 
 
 def cash_flow_profile(bond: DatedAT1, mkt: MarketState, ms: ModelSettings,
-                      randoms: Randoms) -> CashFlowProfile:
+                      randoms: Randoms, *, call_rule: str = "model", mda: bool = True,
+                      conversion: bool = True) -> CashFlowProfile:
+    """Path-wise cash flows of ``bond`` on simulated CET1 and spread paths.
+
+    The switches turn individual AT1 features off, which is how the spread is
+    decomposed and how call vs extension scenarios are valued:
+
+    * ``call_rule``: ``"model"`` (economic call on reset dates), ``"first"``
+      (always called at the first reset) or ``"never"`` (perpetual extension);
+    * ``mda``: coupons throttled by the MDA schedule (False = always paid);
+    * ``conversion``: mechanical trigger active (False = no conversion).
+    """
+    if call_rule not in {"model", "first", "never"}:
+        raise ValueError("call_rule must be 'model', 'first' or 'never'")
     dt, H = ms.dt, ms.horizon
     n_steps = int(round(H / dt))
     cet1 = replace(ms.cet1, c0=mkt.cet1, ponv_intensity=0.0)   # PONV handled analytically
@@ -194,22 +221,35 @@ def cash_flow_profile(bond: DatedAT1, mkt: MarketState, ms: ModelSettings,
     n_paths = C.shape[0]
     big = np.iinfo(np.int64).max
     trig = np.where(sim.trigger_idx < 0, big, sim.trigger_idx)
+    if not conversion:
+        trig = np.full(n_paths, big, dtype=np.int64)
 
     t_cpn, is_reset, after_reset = bond.schedule(mkt.val_date, H)
     cidx = np.minimum(np.round(t_cpn / dt).astype(np.int64), n_steps)
 
-    # --- call decision on reset dates -------------------------------------
-    S = spread_paths(randoms, ms.spread, mkt.refi_spread, dt, n_steps)
+    # --- issuer spread: market OU part + capital add-on --------------------
     top = ms.mda_threshold + ms.combined_buffer
+    S = spread_paths(randoms, ms.spread, mkt.refi_spread, dt, n_steps)
+    S_eff = S + ms.spread.capital_beta * np.maximum(0.0, top - C)
+    if ms.hazard_linked:
+        # normalised by today's *market* spread (no capital add-on), so a CET1
+        # shock inside the buffer raises the hazard already at t=0
+        driver = np.maximum(S_eff, 0.0) / mkt.refi_spread
+    else:
+        driver = np.ones_like(S_eff)
+    I = np.zeros_like(driver)
+    I[:, 1:] = np.cumsum(driver[:, :-1] * dt, axis=1)          # int_0^t driver du
+
+    # --- call decision on reset dates -------------------------------------
     call_col = np.where(is_reset)[0]
-    call_at = np.full(n_paths, big, dtype=np.int64)       # coupon index of the call
-    if call_col.size:
+    call_at = np.full(n_paths, big, dtype=np.int64)            # coupon index of the call
+    if call_col.size and call_rule == "first":
+        call_at[trig > cidx[call_col[0]]] = call_col[0]
+    elif call_col.size and call_rule == "model":
         ci = cidx[call_col]
-        shortfall = np.maximum(0.0, top - C[:, ci])
-        refi = S[:, ci] + ms.spread.capital_beta * shortfall
         # issuer calls when the reset margin costs more than a new AT1, needs
         # the note alive, and (regulatory approval) CET1 above the MDA threshold
-        ok = (bond.reset_margin > refi) & (ci[None, :] < trig[:, None]) & (C[:, ci] >= top)
+        ok = (bond.reset_margin > S_eff[:, ci]) & (ci[None, :] < trig[:, None]) & (C[:, ci] >= top)
         has = ok.any(axis=1)
         first = np.argmax(ok, axis=1)
         call_at[has] = call_col[first[has]]
@@ -219,35 +259,34 @@ def cash_flow_profile(bond: DatedAT1, mkt: MarketState, ms: ModelSettings,
     cpn_amt = rate / bond.coupon_freq * bond.notional
     k = np.arange(t_cpn.size)
     live = (cidx[None, :] < trig[:, None]) & (k[None, :] <= call_at[:, None])
-    frac = mda_fraction(C[:, cidx], ms.mda_threshold, ms.combined_buffer)
-    e_cpn = (live * frac).mean(axis=0) * cpn_amt
+    frac = mda_fraction(C[:, cidx], ms.mda_threshold, ms.combined_buffer) if mda else np.ones((n_paths, t_cpn.size))
+    cpn = live * frac * cpn_amt[None, :]
 
     # --- redemption, conversion, survival ---------------------------------
-    t_grid = np.arange(n_steps + 1) * dt
-    e_call = np.zeros(n_steps + 1)
-    e_trig = np.zeros(n_steps + 1)
-    e_end = np.zeros(n_steps + 1)
     called = call_at < big
-    call_grid = cidx[np.minimum(call_at, t_cpn.size - 1)]
-    np.add.at(e_call, call_grid[called], bond.notional / n_paths)
-    np.add.at(e_end, call_grid[called], 1.0 / n_paths)
-
     conv = (~called) & (trig < big)
+    survive = ~called & ~conv
+    end_idx = np.full(n_paths, n_steps, dtype=np.int64)
+    end_idx[called] = cidx[call_at[called]]
+    end_idx[conv] = trig[conv]
     rec = min(1.0, ms.share_stress * mkt.share_usd / bond.floor_price_usd)
-    np.add.at(e_trig, trig[conv], rec * bond.notional / n_paths)
-    np.add.at(e_end, trig[conv], 1.0 / n_paths)
-    p_surv = float(np.mean(~called & ~conv))
+    pay_end = np.where(called, bond.notional, np.where(conv, rec * bond.notional, 0.0))
+    rows = np.arange(n_paths)
 
     diag = {
         "p_call_first": float(np.mean(called & (call_at == (call_col[0] if call_col.size else -1)))),
         "p_called": float(called.mean()),
         "p_conversion": float(conv.mean()),
-        "p_never_called": p_surv,
+        "p_never_called": float(survive.mean()),
         "avg_coupon_cut": float(1 - (frac * live).sum() / max(live.sum(), 1)),
         "recovery": rec,
     }
-    tail = (mkt.reset_reference + bond.reset_margin) * bond.notional
-    return CashFlowProfile(t_cpn, e_cpn, t_grid, e_call, e_trig, e_end, p_surv, tail, diag)
+    return CashFlowProfile(
+        t_cpn=t_cpn, cpn=cpn, i_cpn=I[:, cidx], t_end=end_idx * dt, pay_end=pay_end,
+        i_end=I[rows, end_idx], survive=survive,
+        tail_coupon=(mkt.reset_reference + bond.reset_margin) * bond.notional,
+        tail_driver=driver[:, -1], diagnostics=diag,
+    )
 
 
 def cont_rate(y_semiannual: float) -> float:

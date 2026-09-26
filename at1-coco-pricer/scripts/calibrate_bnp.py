@@ -151,10 +151,10 @@ def main():
     piv["dispersion_bp"] = 1e4 * (piv.max(axis=1) - piv.min(axis=1))
     print("\nimplied PONV hazard (per year) on", last["date"].iloc[0].date())
     print(piv.round(4).to_string())
-    # dispersion falls with spread vol but plateaus: the cross-section does not pin
-    # the vol down, so the base case is an assumption (stationary sd = 100bp)
-    best_v = 0.01
-    print("base-case spread vol:", 1e4 * best_v, "bp (assumption; see grid above)")
+    # the vol that makes the three bonds most consistent (U-shaped dispersion);
+    # the base case uses the grid point closest to it
+    best_v = float(piv["dispersion_bp"].idxmin()) / 1e4
+    print("spread vol that best aligns the three bonds:", 1e4 * best_v, "bp")
 
     # sensitivity of the last-date cross-section to the curve and refi level
     sens = []
@@ -177,20 +177,26 @@ def main():
     out = []
     for label, v in [("deterministic refi spread", 0.0), (f"stochastic refi spread ({1e4*best_v:.0f}bp vol)", best_v)]:
         ms = settings(kappa, sigma, v, long_run)
-        for r in panel.itertuples():
-            lam, prof = implied_for_row(r, bonds, ms, randoms)
-            out.append(dict(model=label, date=r.date, isin=r.isin, implied_ponv=lam, prof=prof,
-                            r=r.disc_yield, clean=r.clean, accrued=bonds[r.isin].accrued(r.date),
-                            p_called=prof.diagnostics["p_called"], p_conversion=prof.diagnostics["p_conversion"]))
+        # one date at a time: path-wise profiles are large, keep only numbers.
+        # Relative value: price every bond with the SAME hazard (average of the
+        # bonds quoted that day); the pricing error is the bond's rich/cheapness.
+        from at1_coco.market import cont_rate
+        for d, day in panel.groupby("date"):
+            res = []
+            for r in day.itertuples():
+                lam, prof = implied_for_row(r, bonds, ms, randoms)
+                res.append((r, lam, prof))
+            common = float(np.nanmean([x[1] for x in res]))
+            for r, lam, prof in res:
+                acc = bonds[r.isin].accrued(r.date)
+                model_clean = prof.dirty_price(cont_rate(r.disc_yield), common) - acc
+                out.append(dict(model=label, date=r.date, isin=r.isin, implied_ponv=lam,
+                                common_ponv=common, clean=r.clean, model_clean=model_clean,
+                                cheapness_pts=model_clean - r.clean,   # >0: market below model = cheap
+                                p_call_first=prof.diagnostics["p_call_first"],
+                                p_conversion=prof.diagnostics["p_conversion"]))
+            del res
     ts = pd.DataFrame(out)
-    # relative value: price every bond with the SAME hazard (average of the
-    # bonds quoted that day); the pricing error is the bond's rich/cheapness
-    from at1_coco.market import cont_rate
-    ts["common_ponv"] = ts.groupby(["model", "date"])["implied_ponv"].transform("mean")
-    ts["model_clean"] = [p.dirty_price(cont_rate(r), l) - a for p, r, l, a in
-                         zip(ts["prof"], ts["r"], ts["common_ponv"], ts["accrued"])]
-    ts["cheapness_pts"] = ts["model_clean"] - ts["clean"]   # >0: market below model = cheap
-    ts = ts.drop(columns="prof")
     print("\nrich(-)/cheap(+) vs common-hazard model, price points")
     print(ts.groupby(["model", "isin"])["cheapness_pts"].agg(["mean", "min", "max", "last"]).round(2).to_string())
     ts.to_csv(RES / "calibration_timeseries.csv", index=False)

@@ -21,9 +21,11 @@ loss-absorption probability all move together off one economically meaningful
 driver.
 
 **Case study → [RESEARCH.md](RESEARCH.md):** the model calibrated to BNP Paribas's
-three USD AT1s (Capital IQ prices, CET1 history, EBA stress test). One implied
-PONV hazard (~2.35%/yr) fits all three bonds within ~0.1 points, and making the
-refinancing spread stochastic improves the fit to extension risk.
+three USD AT1s (Capital IQ prices, CET1 history, EBA stress test). It decomposes
+the ~270bp spread (≈238bp PONV/tail premium, ≈22bp MDA coupon cuts, ≈4bp
+conversion, 3–10bp extension), prices the first call as a 52–61% event, and shows
+the capital cliff: ~0.5pt per point of CET1 today, ~4–5pt below the MDA threshold.
+One implied PONV hazard (~2.3%/yr) prices all three bonds.
 
 ## Why this framing
 
@@ -61,13 +63,14 @@ at1-coco-pricer/
 │   ├── pricer.py        ← Monte-Carlo cash-flow engine
 │   ├── risk.py          ← CRN Greeks, absorption term structure, loss dist.
 │   └── market.py        ← dated bonds, stochastic refi spread, implied PONV
-├── tests/               ← 23 tests (dynamics, MDA, pricing, risk signs, market)
+├── tests/               ← 24 tests (dynamics, MDA, pricing, risk signs, market)
 ├── scripts/
 │   ├── price_example.py
 │   ├── trigger_term_structure.py
 │   ├── build_dataset.py     ← Capital IQ exports -> tidy CSVs
 │   ├── market_analysis.py   ← capital and price analysis
-│   └── calibrate_bnp.py     ← implied PONV and cross-bond test
+│   ├── calibrate_bnp.py     ← implied PONV and cross-bond test
+│   └── spread_and_stress.py ← spread decomposition, call odds, stress tests
 ├── data/                ← term sheets + public data (CIQ data kept local)
 └── results/             ← generated figures
 ```
