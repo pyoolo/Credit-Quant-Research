@@ -66,25 +66,58 @@ def fit_cet1_ou(c: pd.Series, theta: float = 13.0) -> tuple[float, float]:
     return float(k), float(s)
 
 
-def market_panel(freq: str = "W-FRI", curve: str = "ust10") -> pd.DataFrame:
+FRED_FILE = DATA / "fred_treasury.csv"   # FRED export: observation_date, DGS5, DGS7, DGS10
+
+
+def load_fred_curve() -> pd.DataFrame:
+    """Daily constant-maturity Treasury yields (%) from FRED, tenors 5/7/10y."""
+    f = pd.read_csv(FRED_FILE, parse_dates=["observation_date"], index_col="observation_date")
+    f = f.apply(pd.to_numeric, errors="coerce")[["DGS5", "DGS7", "DGS10"]]
+    return f.dropna(how="all").ffill()
+
+
+def curve_yield(curve_row: pd.Series, tenor: float) -> float:
+    """Linear interpolation on the 5/7/10y points, flat outside."""
+    return float(np.interp(tenor, [5.0, 7.0, 10.0], curve_row[["DGS5", "DGS7", "DGS10"]].values))
+
+
+def market_panel(freq: str = "W-FRI", curve: str = "fred") -> pd.DataFrame:
     """One row per (date, isin) with all model inputs.
 
-    ``curve="ust10"`` (baseline) uses one continuous Treasury series (~10y) for
-    discounting, the reset reference and the AT1 spread, so no benchmark switch
-    can create artificial jumps.  ``curve="matched"`` discounts the 6.875% on its
-    own CIQ benchmark (a 7y note since Jan-2026) and uses it as the 5y-CMT proxy.
+    ``curve="fred"`` (baseline): FRED constant-maturity Treasuries. The reset
+    reference is the 5y CMT (as in the term sheets); each bond is discounted at
+    the Treasury yield interpolated at its time to first call; the AT1 spread is
+    the average of (bond yield - call-matched Treasury).
+
+    Sensitivities using only Capital IQ data: ``curve="ust10"`` uses one
+    continuous ~10y series for everything; ``curve="matched"`` discounts the
+    6.875% on its own CIQ benchmark (a 7y note since Jan-2026).
     """
     p = pd.read_csv(DATA / "bond_prices.csv", parse_dates=["date"])
     wide = {c: p.pivot(index="date", columns="isin", values=c) for c in ["mid_price", "mid_yield", "benchmark_yield"]}
-    # Treasuries: ~10y = benchmark of the 7.45% (continuous); shorter = benchmark
-    # of the 6.875% (a 2033 note), used as the proxy for the 5y CMT reset rate
-    ust10 = wide["benchmark_yield"]["US05602XQQ42"]
-    ust_short = wide["benchmark_yield"]["US05602XQR25"].fillna(ust10)
-    if curve == "ust10":
-        ust_short = ust10
-    refi = wide["mid_yield"].sub(ust_short, axis=0).mean(axis=1)   # avg AT1 spread
+    static = pd.read_csv(DATA / "bonds_static.csv", index_col="isin_144a", parse_dates=["first_call_date"])
     cet1 = pd.read_csv(DATA / "bnp_cet1_quarterly.csv", parse_dates=["date"], index_col="date")["cet1_ratio"]
     share = pd.read_csv(DATA / "bnp_share.csv", parse_dates=["date"], index_col="date")["close_eur"]
+
+    def years_to_call(isin, day):
+        return (static.at[isin, "first_call_date"] - day).days / 365.25
+
+    if curve == "fred":
+        fred = load_fred_curve()
+
+        def treasuries(day):
+            row = fred[fred.index <= day].iloc[-1]          # last FRED print on or before the day
+            disc = {i: curve_yield(row, years_to_call(i, day)) for i in ORDER}
+            return disc, float(row["DGS5"])
+    else:
+        ust10 = wide["benchmark_yield"]["US05602XQQ42"]
+        ust_short = wide["benchmark_yield"]["US05602XQR25"].fillna(ust10)
+        if curve == "ust10":
+            ust_short = ust10
+
+        def treasuries(day):
+            disc = {i: (ust_short.at[day] if i == "US05602XQR25" else ust10.at[day]) for i in ORDER}
+            return disc, float(ust_short.at[day])
 
     dates = wide["mid_price"].resample(freq).last().index
     rows = []
@@ -94,14 +127,14 @@ def market_panel(freq: str = "W-FRI", curve: str = "ust10") -> pd.DataFrame:
         pub = cet1[cet1.index + pd.Timedelta(days=35) <= day]
         if pub.empty:
             continue
-        for isin in ORDER:
-            px = wide["mid_price"].at[day, isin] if isin in wide["mid_price"] else np.nan
-            if np.isnan(px):
-                continue
-            disc = ust_short.at[day] if isin == "US05602XQR25" else ust10.at[day]
+        disc, ref = treasuries(day)
+        quoted = [i for i in ORDER if not np.isnan(wide["mid_price"].at[day, i])]
+        # current AT1 spread: average of (bond yield - Treasury used to discount it)
+        refi = float(np.mean([wide["mid_yield"].at[day, i] - disc[i] for i in quoted]))
+        for isin in quoted:
             rows.append(
-                dict(date=day, isin=isin, clean=px, disc_yield=disc / 100, reset_ref=ust_short.at[day] / 100,
-                     refi=refi.at[day] / 100, cet1=pub.iloc[-1],
+                dict(date=day, isin=isin, clean=wide["mid_price"].at[day, isin], disc_yield=disc[isin] / 100,
+                     reset_ref=ref / 100, refi=refi / 100, cet1=pub.iloc[-1],
                      share_usd=share[share.index <= day].iloc[-1] * EURUSD)
             )
     return pd.DataFrame(rows)
@@ -130,7 +163,7 @@ def main():
     kappa, sigma = fit_cet1_ou(c)
     print(f"CET1 OU fit ({len(c)} obs, theta=13): kappa={kappa:.3f}  sigma={sigma:.3f} pp/sqrt(y)")
 
-    panel = market_panel(curve="ust10")
+    panel = market_panel(curve="fred")
     long_run = float(panel.groupby("date")["refi"].first().mean())
     print(f"panel: {panel['date'].nunique()} weekly dates, mean AT1 spread {1e4*long_run:.0f}bp")
 
@@ -159,7 +192,7 @@ def main():
     # sensitivity of the last-date cross-section to the curve and refi level
     sens = []
     ms = settings(kappa, sigma, 0.01, long_run)
-    for curve in ["ust10", "matched"]:
+    for curve in ["fred", "ust10", "matched"]:
         lp = market_panel(curve=curve)
         lp = lp[lp["date"] == lp["date"].max()]
         for shift in [-0.002, 0.0, 0.002]:

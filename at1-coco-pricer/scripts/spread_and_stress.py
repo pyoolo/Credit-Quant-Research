@@ -79,7 +79,7 @@ def main():
     static = pd.read_csv(DATA / "bonds_static.csv", index_col="isin_144a")
     bonds = {i: DatedAT1.from_row(i, static.loc[i]) for i in ORDER}
     kappa, sigma = fit_cet1_ou(load_cet1_series())
-    panel = market_panel(curve="ust10")
+    panel = market_panel(curve="fred")
     long_run = float(panel.groupby("date")["refi"].first().mean())
     last = panel[panel["date"] == panel["date"].max()].set_index("isin")
     ms = settings(kappa, sigma, 0.01, long_run)

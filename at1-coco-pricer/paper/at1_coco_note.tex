@@ -1,130 +1,518 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
-\usepackage{amsmath,amssymb,booktabs,hyperref}
+\usepackage{amsmath,amssymb,amsthm,booktabs,graphicx,float}
+\usepackage[hidelinks]{hyperref}
 \usepackage{parskip}
 
-\title{Pricing AT1 Contingent Convertibles as a Contingent Claim on Bank Capital}
-\author{Credit Quant Research --- \texttt{at1-coco-pricer}}
-\date{}
+\graphicspath{{../results/}}
+\newtheorem{proposition}{Proposition}
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\1}{\mathbf{1}}
+\newcommand{\ctrig}{c_{\mathrm{trig}}}
+\newcommand{\bmda}{\bar c_{\mathrm{MDA}}}
+
+\title{Pricing AT1 Contingent Convertibles as a Claim on Bank Capital\\[4pt]
+\large Model, numerical method, and a calibration to BNP Paribas's USD AT1s}
+\author{Paolo Mastrogiacomo \\ \texttt{Credit-Quant-Research / at1-coco-pricer}}
+\date{September 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-We price a perpetual, non-cumulative Additional Tier~1 (AT1) instrument by
-taking the issuer's Common Equity Tier~1 (CET1) ratio as the single state
-variable. Every AT1 contingency---mechanical loss absorption, resolution
-(Point-of-Non-Viability), coupon cancellation via the Maximum Distributable
-Amount, and issuer call/extension---is a functional of that ratio, so a
-capital-driven Monte-Carlo delivers mutually consistent trigger, coupon and
-extension risk from one simulation. We describe the dynamics, the cash-flow
-map, the risk-measure computation, and the calibration caveats.
+An Additional Tier~1 (AT1) bond is a perpetual, deeply subordinated bank bond
+whose cash flows depend on the issuer's capital: coupons are cut when capital
+enters the regulatory buffer, principal is converted or written down at a
+capital trigger or at the regulator's discretion, and the issuer calls only when
+refinancing is cheaper. We take the Common Equity Tier~1 (CET1) ratio as the
+state variable, add a mean-reverting issuer spread that drives both the call
+decision and the regulatory write-down (PONV) hazard, and price by Monte Carlo
+with the PONV hazard integrated analytically along each path. Calibrated to
+BNP Paribas's three USD AT1s (September 2026), one implied hazard of about
+$2.3\%$ a year prices all three bonds, and the cross-section identifies the
+volatility of the refinancing spread. About $238$bp of the $\approx 270$bp
+spread is compensation for PONV, tail and liquidity risk; mechanical conversion
+explains $\approx4$bp. The price is flat in capital above the MDA threshold
+($\approx0.5$ points per point of CET1) and steep below it ($\approx4$--$5$
+points).
 \end{abstract}
 
-\section{Instrument}
-An AT1 CoCo is a perpetual, deeply subordinated bank instrument. It pays a
-fixed coupon to a first call date (typically five years), after which the coupon
-resets to a reference rate plus a contractual spread. Three features make it not
-a bond:
+\tableofcontents
+
+%======================================================================
+\section{The instrument and the idea}
+%======================================================================
+
+\subsection{What an AT1 is}
+An AT1 bond counts as going-concern regulatory capital for a bank. Its terms
+make it behave partly like equity:
 \begin{enumerate}
-  \item \textbf{Loss absorption.} If CET1 falls to a contractual trigger
-  $c_{\text{trig}}$ (5.125\% or 7\%), the principal is written down or converted
-  to equity. Resolution authorities may also impose loss at the Point of
-  Non-Viability (PONV) before any mechanical trigger.
-  \item \textbf{Coupon cancellation.} Coupons are discretionary and
-  non-cumulative. Once CET1 enters the \emph{combined buffer requirement},
-  CRD~IV caps distributions through the Maximum Distributable Amount (MDA).
-  \item \textbf{Extension risk.} The instrument is perpetual; the investor
-  relies on the issuer's economic incentive to call. Weak issuers---for whom
-  refinancing is expensive---rationally extend, precisely when the investor
-  least wants them to.
+  \item \textbf{Perpetual, with issuer calls.} There is no maturity. The issuer
+  may redeem at par on call dates; for the bonds studied here, only on
+  \emph{reset dates}, every five years from the first call. If not called, the
+  coupon resets to a reference rate (5-year US Treasury, CMT) plus the margin
+  fixed at issue. Investors are exposed to \emph{extension}: the issuer calls
+  when it is cheap to refinance, and does not when it is expensive, which is
+  exactly when investors would want their money back.
+  \item \textbf{Discretionary, non-cumulative coupons.} Coupons may be cancelled
+  at any time and are lost for good. They are also mechanically restricted when
+  CET1 falls inside the \emph{combined buffer requirement}: the Maximum
+  Distributable Amount (MDA) rule of CRD~IV.
+  \item \textbf{Loss absorption.} If CET1 falls below a contractual trigger
+  ($5.125\%$ here), the bond converts into shares (or is written down). The
+  resolution authority can also impose losses at the \emph{Point of
+  Non-Viability} (PONV) while CET1 is still above the trigger: Credit Suisse's
+  AT1s were written to zero in March 2023 with a reported CET1 ratio of about $14\%$.
 \end{enumerate}
 
+\subsection{Why capital is the state variable}
+Trigger, coupon restriction and (partly) the call decision are all written on
+the CET1 ratio. Modelling CET1 directly makes these three risks consistent by
+construction: the same simulated path that approaches the MDA threshold also
+cuts coupons, discourages a call, and raises the chance of loss absorption.
+The alternative, an equity-barrier model, needs a mapping from share price to
+capital that is unobservable and unstable.
+
+Capital alone is not enough, however. The market prices AT1s far below what
+historical capital volatility would justify (\S\ref{sec:results}), and the
+call decision depends on market spreads, not only on capital. We therefore add
+a second state variable, the issuer's AT1 spread, which (i) drives the call
+decision and (ii) scales the PONV hazard.
+
+%======================================================================
 \section{State dynamics}
-Let $C_t$ denote the CET1 ratio in percentage points. Under the pricing measure
-we model
-\begin{equation}
-  dC_t = \kappa(\theta - C_t)\,dt + \sigma\,dW_t - J_t\,dN_t,
+%======================================================================
+
+\subsection{CET1 ratio}
+Let $C_t$ be the CET1 ratio in percentage points. We use a mean-reverting
+jump-diffusion with downward jumps:
+\begin{equation}\label{eq:cet1}
+  dC_t = \kappa(\theta - C_t)\,dt + \sigma\,dW_t - J\,dN_t,
 \end{equation}
 where $N_t$ is a Poisson process with intensity $\lambda_J$ (stress events) and
-each jump $J_t>0$ is lognormal with median $m_J$ and log-volatility $\sigma_J$,
-representing a \emph{downward} capital shock. Mean reversion to the target
-$\theta$ stands in for management's capital planning and retained earnings;
-upward jumps are deliberately absent, since recapitalisation is gradual whereas
-losses are sudden.
-
-Two absorption times are recorded per path: the mechanical time
-$\tau_m=\inf\{t: C_t \le c_{\text{trig}}\}$ and an independent PONV time with
-constant hazard $\lambda_{\text{PONV}}$. Absorption is
-$\tau=\min(\tau_m,\tau_{\text{PONV}})$.
-
-\section{Coupon cancellation via the MDA}
-Let $b$ be the MDA floor (total capital requirement) and $w$ the combined-buffer
-width. The maximum distributable fraction follows the CRD~IV quartile ladder in
-the buffer $[b,\,b+w]$:
+jump sizes are i.i.d.
 \[
+  J = m_J \exp\!\bigl(\sigma_J Z - \tfrac12\sigma_J^2\bigr),\qquad Z\sim N(0,1),
+  \qquad \E[J]=m_J .
+\]
+Mean reversion to $\theta$ represents the bank's capital management (retained
+earnings, distribution policy, management of risk-weighted assets); the target
+$\theta$ is management's stated CET1 objective. Jumps are one-sided because
+losses arrive suddenly while recapitalisation is gradual.
+
+The \emph{mechanical trigger time} is
+$\tau_m = \inf\{t:\ C_t \le \ctrig\}$.
+
+\subsection{Issuer AT1 spread}
+Let $S_t$ be the market level of the issuer's new-issue AT1 spread (decimal).
+It follows an Ornstein--Uhlenbeck process correlated with capital shocks,
+\begin{equation}\label{eq:spread}
+  dS_t = a(\bar s - S_t)\,dt + \eta\,dB_t,\qquad
+  d\langle B, W\rangle_t = \rho\,dt,\quad \rho<0,
+\end{equation}
+and the issuer's \emph{effective} spread adds a capital premium once CET1 is
+inside the buffer:
+\begin{equation}\label{eq:seff}
+  s_t = S_t + \beta\,\bigl(\bmda - C_t\bigr)^+ ,
+\end{equation}
+where $\bmda$ is the MDA threshold defined below. The effective spread $s_t$ is
+the rate at which the bank could issue a new AT1 at time $t$.
+
+%======================================================================
+\section{Contract features as functionals of the state}
+%======================================================================
+
+\subsection{MDA coupon restriction}
+Let $b$ be the MDA floor (Pillar~1 plus the CET1 part of Pillar~2R) and $w$ the
+combined buffer (conservation, systemic and countercyclical buffers), so that
+$\bmda=b+w$. With $q=(C-b)/w$ the position inside the buffer, the fraction of
+the scheduled coupon that can be paid is
+\begin{equation}\label{eq:mda}
   \phi(C)=
   \begin{cases}
-    1.0 & C \ge b+w,\\
-    0.6 & C \in [b+0.75w,\,b+w),\\
-    0.4 & C \in [b+0.50w,\,b+0.75w),\\
-    0.2 & C \in [b+0.25w,\,b+0.50w),\\
-    0.0 & C < b+0.25w.
+    1 & C \ge b+w,\\
+    0.6 & q\in[0.75,1),\\
+    0.4 & q\in[0.50,0.75),\\
+    0.2 & q\in[0.25,0.50),\\
+    0 & q<0.25 \ \text{or}\ C<b.
   \end{cases}
-\]
-The coupon paid on a live date is $\phi(C_t)$ times the scheduled coupon. This
-makes coupon-cancellation risk endogenous: it emerges from the same paths that
-generate trigger risk, and a \emph{wider} buffer requirement raises the hurdle
-for full coupons---an adverse feature for the holder, recovered as a negative
-buffer sensitivity in \S\ref{sec:risk}.
-
-\section{Call and extension}
-At each call date the issuer compares the cost of keeping the (reset) coupon,
-$s_{\text{reset}}$, with the spread at which it could reissue,
-\begin{equation}
-  s_{\text{refi}}(C) = s_0 + \beta \max\bigl(0,\;(b+w) - C\bigr),
 \end{equation}
-and calls iff $s_{\text{reset}} > s_{\text{refi}}(C)$. Because
-$s_{\text{refi}}$ \emph{widens} as capital erodes, a distressed issuer faces a
-prohibitive refinancing cost and extends---the empirically observed behaviour
-and the source of extension risk in the valuation.
+This is a stylised version of the quartile schedule; it makes
+coupon-cancellation risk emerge from the same paths as trigger risk.
 
+\subsection{Call and extension}
+Let $T_1<T_2<\dots$ be the reset (call) dates and $m$ the reset margin over the
+5-year reference rate. The issuer calls at the first reset date $T_k$ at which
+\begin{equation}\label{eq:call}
+  m > s_{T_k}
+  \qquad\text{and}\qquad C_{T_k}\ge \bmda
+  \qquad\text{and}\qquad T_k<\tau_m ,
+\end{equation}
+that is, when keeping the bond costs more than issuing a new one, provided the
+regulator would approve the call (CET1 above the MDA threshold) and the bond is
+still alive. Denote the call time by $\tau_c$ ($+\infty$ if never). If
+$\eta>0$ the call is random even for a healthy bank; the low-margin bond is the
+first to be extended when spreads widen.
+
+\subsection{Conversion}
+At $\tau_m$ the bond converts into shares at the higher of the market price
+and a floor price $P_{\mathrm{floor}}$. The investor receives shares worth
+$F\cdot S^{\mathrm{eq}}_{\tau_m}/P_{\mathrm{floor}}$ (when the share trades
+below the floor, as it will at the trigger). The model uses a stressed share
+price $S^{\mathrm{eq}}_{\tau_m} = \xi\, S^{\mathrm{eq}}_0 X_0$ (converted to
+USD at $X_0$), so the recovery is
+\begin{equation}
+  R = \min\!\left(1,\ \frac{\xi\,S^{\mathrm{eq}}_0 X_0}{P_{\mathrm{floor}}}\right).
+\end{equation}
+
+\subsection{PONV: a hazard linked to the spread}
+The regulator may impose losses before the trigger. We model this as a
+doubly-stochastic (Cox) event with intensity proportional to the effective
+spread,
+\begin{equation}\label{eq:hazard}
+  \lambda_t = \lambda\,\frac{s_t}{s_0},
+\end{equation}
+so $\lambda$ is today's hazard, and the hazard rises when spreads widen or
+capital falls inside the buffer. Recovery at PONV is zero. Linking the hazard to
+$s_t$ is what makes extension consistent: the states in which the issuer
+extends ($s_t>m$) are exactly those in which the bond is riskier and worth less.
+With a constant hazard, extension would be valued at a discount rate that does
+not reflect the state, and could even look valuable to the investor.
+
+%======================================================================
 \section{Valuation}
-The price is the risk-neutral expectation of discounted cash flows under a flat
-continuously-compounded curve $r$:
-\begin{equation}
-  V_0 = \mathbb{E}\!\left[
-    \sum_{t_i < \tau \wedge \tau_c} \phi(C_{t_i})\,c(t_i)\,e^{-r t_i}
-    \;+\; \mathbf{1}_{\{\tau_c \le \tau\}} F\,e^{-r\tau_c}
-    \;+\; \mathbf{1}_{\{\tau < \tau_c\}} R\,F\,e^{-r\tau}
-  \right],
+%======================================================================
+
+\subsection{Pricing equation}
+Let $r$ be the flat, continuously compounded risk-free rate, $F$ the face and
+$t_i$ the coupon dates, paid at frequency $f$. The scheduled coupon is
+$c(t_i)=c_0$ up to and including $T_1$ and $c(t_i)=y^{\mathrm{ref}}+m$ after it.
+Let $\tau_P$ be the PONV time. The dirty price is
+\begin{equation}\label{eq:price}
+\begin{split}
+  V_0=\E\Biggl[\,&\sum_{t_i}\1_{\{t_i<\tau_m,\ t_i\le\tau_c,\ t_i<\tau_P\}}
+  \frac{\phi(C_{t_i})\,c(t_i)\,F}{f}\,e^{-rt_i}
+  + \1_{\{\tau_c<\tau_m,\ \tau_c<\tau_P\}}\,F\,e^{-r\tau_c}\\
+  &+ \1_{\{\tau_m<\tau_c,\ \tau_m<\tau_P\}}\,R\,F\,e^{-r\tau_m}\Biggr]
+  + \text{tail}.
+\end{split}
 \end{equation}
-where $\tau_c$ is the (rational) call time, $F$ the face, $R$ the recovery on
-absorption, and $c(t_i)$ the scheduled coupon (initial before the first call,
-reset thereafter). Paths surviving to the horizon receive an analytic perpetuity
-tail $c_{\text{reset}}F/y$ at a tail yield $y$, immaterial once the horizon is
-long relative to $r$.
+Paths alive at the horizon $H=40$ years receive the value of a perpetuity at
+the reset coupon, $F(y^{\mathrm{ref}}+m)/(r+\lambda_H)$, discounted to today.
 
-\section{Risk}\label{sec:risk}
-Sensitivities are computed by central-difference bump-and-reprice under
-\emph{common random numbers}: the same primitive draws price the base and bumped
-scenarios, cancelling Monte-Carlo noise so the finite difference is stable at
-moderate path counts. The engine reports $\partial V/\partial C_0$ (capital
-delta), $\partial V/\partial\sigma$ (vega), sensitivities to $\lambda_J$ and
-$\lambda_{\text{PONV}}$, the discount-rate DV01, and sensitivities to
-$c_{\text{trig}}$ and the buffer width. It also returns the cumulative
-absorption term structure $\Pr(\tau\le t)$ and the loss distribution
-(expected loss, VaR, ES) of the discounted payoff.
+\subsection{Conditional Monte Carlo for the PONV hazard}
+\begin{proposition}
+Let $\mathcal{G}$ be the $\sigma$-algebra generated by the paths of $(C,S)$.
+Conditional on $\mathcal G$, the PONV time has intensity \eqref{eq:hazard}, so
+\[
+  \Pr(\tau_P>t\mid\mathcal G)=\exp\!\Bigl(-\lambda\int_0^t \frac{s_u}{s_0}\,du\Bigr)
+  \equiv e^{-\lambda I_t}.
+\]
+Hence
+\begin{equation}\label{eq:cmc}
+  V_0(\lambda)=\E\Biggl[\,\sum_{t_i}\mathrm{CF}_i\,e^{-rt_i-\lambda I_{t_i}}
+  + \mathrm{CF}_{\mathrm{end}}\,e^{-rT_{\mathrm{end}}-\lambda I_{T_{\mathrm{end}}}}\Biggr],
+\end{equation}
+where $\mathrm{CF}_i$ are the coupon cash flows and $\mathrm{CF}_{\mathrm{end}}$
+is the call, conversion or tail payment at the end of each path's life, all
+computed without reference to $\tau_P$.
+\end{proposition}
+\begin{proof}
+Condition each indicator $\1_{\{t<\tau_P\}}$ in \eqref{eq:price} on
+$\mathcal G$ (tower property); every other term is $\mathcal G$-measurable.
+\end{proof}
 
-\section{Calibration caveat}
-CET1 is not a traded asset, so the state dynamics cannot be calibrated by
-replication alone. In practice one anchors $\theta,\sigma,\lambda_J$ to the
-issuer's capital plan and stress history (a real-world view), then adjusts the
-hazards and recovery so that model prices match observed AT1 spreads and call
-behaviour (a pricing view). This measure change is an identification gap, not a
-free parameter: it should be stated, stress-tested, and---ideally---disciplined
-by a cross-section of the issuer's instruments. The companion code ships with a
-synthetic ground-truth generator so every estimator is checked against a known
-answer before any market calibration.
+Consequences for the numerics:
+\begin{itemize}
+  \item PONV is never simulated as an event, which removes its sampling noise
+  (Rao--Blackwellisation).
+  \item On a fixed set of paths, $V_0(\lambda)$ is smooth and strictly decreasing
+  in $\lambda$ (because $I_t>0$). The market-implied hazard is therefore the unique root of
+  $V_0(\lambda)=P^{\mathrm{clean}}+\mathrm{AI}$ and is found with Brent's method.
+  \item Cash flows and $I_t$ are stored per path once; each evaluation of
+  $V_0(\lambda)$ is a vectorised sum.
+\end{itemize}
+
+\subsection{Discretisation}
+The grid is monthly ($\Delta=1/12$) over 40 years, with 20{,}000 paths.
+CET1 uses an Euler step with a Bernoulli jump of probability
+$1-e^{-\lambda_J\Delta}$; the spread uses the exact OU transition
+\[
+  S_{n+1}=\bar s+(S_n-\bar s)e^{-a\Delta}
+  +\eta\sqrt{\tfrac{1-e^{-2a\Delta}}{2a}}\,
+  \bigl(\rho Z^C_n+\sqrt{1-\rho^2}\,Z^\perp_n\bigr).
+\]
+Coupons are discounted at their exact dates; path events (trigger, call) are
+read on the grid. Market prices are clean, so the model value is compared with
+the clean price plus 30/360 accrued interest (the accrued amount matches Capital
+IQ to three decimals).
+
+\subsection{Common random numbers}
+All primitive random numbers are drawn once and reused across scenarios,
+bumps and feature switches. Differences between two prices (Greeks, stress
+P\&L, spread components) therefore carry no Monte Carlo noise of their own.
+
+%======================================================================
+\section{Calibration}\label{sec:calib}
+%======================================================================
+
+\subsection{Capital dynamics from history}
+The CET1 series combines annual data (2014--2023) with quarterly data
+(2024Q1--2026Q2): 20 observations. The OU transition density is Gaussian for
+any step $\Delta_k$,
+\[
+  C_{k+1}\mid C_k \sim N\!\Bigl(\theta+(C_k-\theta)e^{-\kappa\Delta_k},\
+  \tfrac{\sigma^2}{2\kappa}\bigl(1-e^{-2\kappa\Delta_k}\bigr)\Bigr),
+\]
+so the mixed-frequency likelihood is exact. Fixing $\theta=13\%$ (BNP's target)
+gives $\hat\kappa=0.32$ and $\hat\sigma=0.41$pp$/\sqrt{\text{yr}}$. The jumps
+cannot be identified from this sample; we use $\lambda_J=0.12$, $m_J=2.2$pp,
+$\sigma_J=0.5$, whose 95th-percentile jump (4.4pp) matches BNP's CET1 depletion
+in the EBA 2025 adverse scenario (4.2pp, fully loaded).
+
+\subsection{Regulatory geometry}
+From the 2025 requirement stack, $b=4.5+1.14=5.64\%$ and
+$w=2.5+1.5+0.73+0.14=4.87\%$ (conservation, G-SIB, countercyclical and
+systemic-risk buffers), so $\bmda=10.51\%$. The trigger is $\ctrig=5.125\%$ of
+group CET1.
+
+\subsection{Market inputs}
+The inputs come from Capital IQ evaluated prices:
+\begin{itemize}
+  \item the clean price of each bond;
+  \item the Treasury yield, recovered as \emph{yield minus spread to
+  benchmark}. One continuous $\sim$10-year series is used for all bonds,
+  because Capital IQ changes the benchmark of one bond twice in the sample;
+  \item the average AT1 spread $S_0$;
+  \item the latest published CET1 ratio, with a 35-day publication lag;
+  \item the share price.
+\end{itemize}
+The spread process uses $a=0.5$, $\bar s$ equal to the sample mean (270bp) and
+$\rho=-0.3$; the capital premium is $\beta=1\%$ per point of CET1 and the share
+stress is $\xi=0.2$.
+
+\subsection{Implied hazard and cross-sectional identification}
+For each date and bond $j$ we solve $V_0^{(j)}(\lambda_j)=P_j$. The three bonds
+share issuer, capital and trigger, so a correct model should give
+$\lambda_1=\lambda_2=\lambda_3$. The dispersion
+$D(\eta)=\max_j\lambda_j-\min_j\lambda_j$ is a specification test. Minimising it
+over the spread volatility $\eta$ identifies the volatility with which the
+market prices the issuer's call option: two unknowns ($\lambda,\eta$), three
+prices.
+
+%======================================================================
+\section{Analytics}
+%======================================================================
+
+\subsection{Spread decomposition}
+Switch the features on one at a time and convert each price into a yield to the
+first call date, $y^{(k)}$ (semi-annual, bullet to $T_1$):
+\begin{center}
+\begin{tabular}{cl}
+\toprule
+$k$ & price $V^{(k)}$ \\
+\midrule
+0 & certain call at $T_1$, full coupons, no conversion, $\lambda=0$ (risk-free) \\
+1 & + PONV hazard $\lambda$ \\
+2 & + MDA coupon restriction \\
+3 & + conversion at the trigger \\
+4 & + economic call rule \eqref{eq:call} \ $=$ market price \\
+\bottomrule
+\end{tabular}
+\end{center}
+Because $V^{(0)}$ is discounted at $r$, $y^{(0)}$ is the Treasury yield, and the
+increments $y^{(k)}-y^{(k-1)}$ telescope to the market yield-to-call spread. The
+order is chosen so that every feature is valued with risky discounting and
+extension comes last, with all other features in place.
+
+\subsection{Call probability and the cost of the call option}
+$\Pr(\tau_c=T_1)$ is read from the paths. The cost of the issuer's option is
+$V^{\mathrm{call\ at\ }T_1}-V$. Negative convexity is measured as the extra loss
+for a $+50$bp shift in the spread level (with the hazard scaled accordingly),
+relative to a bond whose call at $T_1$ is certain.
+
+\subsection{Stress and capital delta}
+Each scenario shifts $C_0$, the spread ($S_0$ and $\bar s$, with $\lambda$ scaled
+by $S$) or the Treasury level, and reprices on the same paths. The capital delta
+$\partial V/\partial C_0$ is a finite difference on a grid of $C_0$.
+
+%======================================================================
+\section{Results: BNP Paribas, 25 September 2026}\label{sec:results}
+%======================================================================
+
+\subsection{Capital}
+\begin{figure}[H]
+\centering\includegraphics[width=0.8\textwidth]{bnp_cet1_history.png}
+\caption{CET1 ratio, CET1 requirement (MDA threshold) and AT1 trigger.}
+\end{figure}
+CET1 was $12.97\%$ at June 2026 against a $10.43\%$ requirement: a cushion of
+$2.5$pp ($\approx$\,EUR~20bn). The trigger is $7.8$pp lower
+($\approx$\,EUR~62bn of losses).
+
+\subsection{The three bonds and the implied hazard}
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+ & 6.875\% NC33 & 7.20\% NC36 & 7.45\% NC35 \\
+\midrule
+Reset margin (bp) & 285 & 294 & 313 \\
+Clean price & 94.39 & 95.25 & 97.57 \\
+Model price with $\lambda=0$ & 114.1 & 117.5 & 117.8 \\
+Implied hazard $\lambda$ (\%/yr) & 2.30 & 2.33 & 2.30 \\
+$\Pr(\text{called at } T_1)$ & 52\% & 55\% & 61\% \\
+Lifetime $\Pr(\text{conversion})$ & 1.4\% & 1.6\% & 1.4\% \\
+\bottomrule
+\end{tabular}
+\caption{Last date, $\eta=100$bp.}
+\end{table}
+
+Dispersion of the implied hazards across the three bonds, by spread volatility:
+\begin{center}
+\begin{tabular}{lccccccc}
+\toprule
+$\eta$ (bp) & 0 & 25 & 50 & 75 & 100 & 150 & 200\\
+\midrule
+$D(\eta)$ (bp of hazard) & 4.8 & 4.6 & 3.6 & 2.8 & \textbf{2.7} & 3.5 & 4.0\\
+\bottomrule
+\end{tabular}
+\end{center}
+The dispersion is U-shaped, so the cross-section identifies
+$\eta\approx75$--$100$bp. Over 66 weekly dates, the mean dispersion falls from
+$8.2$bp (deterministic spread) to $6.0$bp (stochastic spread).
+
+\begin{figure}[H]
+\centering\includegraphics[width=\textwidth]{implied_ponv.png}
+\caption{Implied PONV hazard per bond, weekly.}
+\end{figure}
+
+\subsection{What the spread pays for}
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+bp of yield-to-call spread & 6.875\% NC33 & 7.20\% NC36 & 7.45\% NC35 \\
+\midrule
+PONV / tail / liquidity & 238 & 241 & 237 \\
+MDA coupon cuts & 21 & 24 & 24 \\
+Conversion at the trigger & 4 & 5 & 4 \\
+Extension & 10 & 6 & 3 \\
+\midrule
+Total $=$ market & 273 & 275 & 268 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[H]
+\centering\includegraphics[width=0.85\textwidth]{spread_decomposition.png}
+\end{figure}
+With BNP's historical capital volatility, mechanical conversion is a
+1.4--1.6\% lifetime event worth $\approx4$bp. Almost all of the spread is
+compensation for regulatory write-down before the trigger, tail risk beyond the
+historical sample, and liquidity. The extension component decreases with the
+reset margin, as the theory requires.
+
+\subsection{Call and extension}
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+ & 6.875\% NC33 & 7.20\% NC36 & 7.45\% NC35 \\
+\midrule
+Margin $-$ today's AT1 spread (bp) & $+8$ & $+17$ & $+36$ \\
+Cost of the issuer's option (pts) & 0.51 & 0.38 & 0.20 \\
+P\&L, spreads $+50$bp (pts) & $-3.3$ & $-3.6$ & $-3.2$ \\
+\quad of which from extension (pts) & $-1.0$ & $-0.8$ & $-0.6$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[H]
+\centering\includegraphics[width=0.8\textwidth]{call_probability.png}
+\end{figure}
+The low-margin bond is the most negatively convex. In the September 2026
+sell-off its spread widened by $35$bp, against $12$--$14$bp for the other two.
+
+\subsection{Stress and the capital cliff}
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+Clean price change (points) & 6.875\% NC33 & 7.20\% NC36 & 7.45\% NC35 \\
+\midrule
+Rates $+100$bp & $-5.2$ & $-6.3$ & $-6.1$ \\
+CET1 $-2$pp & $-1.3$ & $-1.4$ & $-1.4$ \\
+CET1 $-4.2$pp (EBA adverse) & $-9.2$ & $-10.4$ & $-9.8$ \\
+AT1 spreads $+200$bp & $-16.5$ & $-16.7$ & $-15.7$ \\
+EBA adverse $+$ spreads $+200$bp & $-24.9$ & $-26.2$ & $-24.8$ \\
+PONV hazard $\times3$ & $-26.3$ & $-28.9$ & $-27.6$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{figure}[H]
+\centering\includegraphics[width=0.8\textwidth]{price_vs_cet1.png}
+\end{figure}
+The capital delta is $\approx0.5$ points per point of CET1 at $13\%$ and
+$\approx4$--$5$ below the MDA threshold. Crossing $\bmda$ switches on three
+mechanisms at once: coupons are cut by \eqref{eq:mda}, the call is blocked by
+\eqref{eq:call}, and the hazard rises through \eqref{eq:seff}--\eqref{eq:hazard}.
+For risk management, the distance that matters is the distance to the MDA
+threshold, not to the trigger.
+
+%======================================================================
+\section{Limitations and extensions}
+%======================================================================
+\begin{enumerate}
+  \item \textbf{Measure.} CET1 is not traded. Its dynamics are estimated under
+  the physical measure, and all remaining risk premia are absorbed by $\lambda$,
+  which is therefore a risk-neutral hazard, not a default probability.
+  \item \textbf{Rates.} The curve is flat and non-stochastic, and the 5-year
+  reset rate is proxied by the $\sim$10-year Treasury. The curve choice moves
+  the cross-bond dispersion from 2.7bp to 8bp. A proper curve (FRED DGS5,
+  DGS7, DGS10) and a short-rate model (Hull--White) are the first extensions.
+  \item \textbf{Capital premium.} $\beta$ controls the size of the capital cliff
+  and is assumed. A cross-bank regression of AT1 spreads on MDA distance would
+  calibrate it.
+  \item \textbf{Data.} Prices are evaluated rather than traded, and cover
+  15 months of tight spreads.
+  \item \textbf{Conversion.} A single stressed share price replaces a joint
+  equity--capital process, and PONV recovery is set to zero.
+\end{enumerate}
+
+\appendix
+\section{Parameters}
+\begin{center}
+\small
+\begin{tabular}{llll}
+\toprule
+Symbol & Meaning & Value & Source \\
+\midrule
+$\kappa,\sigma$ & CET1 mean reversion, volatility & 0.32, 0.41pp & MLE, 2014--2026 \\
+$\theta$ & CET1 target & 13\% & BNP strategic plan \\
+$\lambda_J, m_J, \sigma_J$ & stress jumps & 0.12, 2.2pp, 0.5 & EBA 2025 check \\
+$b, w$ & MDA floor, combined buffer & 5.64\%, 4.87\% & requirement stack \\
+$\ctrig$ & trigger & 5.125\% & term sheets \\
+$a, \bar s, \eta, \rho$ & spread OU & 0.5, 270bp, 100bp, $-0.3$ & sample, cross-section \\
+$\beta$ & capital premium & 1\% per pp & assumption \\
+$\xi$ & share at trigger / today & 0.2 & assumption \\
+$\lambda$ & PONV hazard today & $\approx2.3\%$ & implied \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section{Code map}
+\begin{center}
+\small
+\begin{tabular}{ll}
+\toprule
+File & Content \\
+\midrule
+\texttt{processes.py} & CET1 jump-diffusion \eqref{eq:cet1}, trigger times \\
+\texttt{instrument.py} & MDA schedule \eqref{eq:mda}, stylised term sheet \\
+\texttt{pricer.py}, \texttt{risk.py} & original engine, Greeks, loss distribution \\
+\texttt{market.py} & dated bonds, \eqref{eq:spread}--\eqref{eq:hazard}, pricing \eqref{eq:cmc}, implied $\lambda$ \\
+\texttt{calibrate\_bnp.py} & calibration (\S\ref{sec:calib}) \\
+\texttt{spread\_and\_stress.py} & decomposition, call analysis, stress \\
+\bottomrule
+\end{tabular}
+\end{center}
 
 \end{document}

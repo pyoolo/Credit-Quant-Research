@@ -1,0 +1,21 @@
+# S&P Capital IQ data is licensed: keep raw exports and CIQ-derived series local
+data/raw/
+data/bond_prices.csv
+data/bnp_cet1_quarterly.csv
+data/bnp_capital_annual.csv
+data/bnp_share.csv
+results/calibration_*.csv
+
+# Python and tools
+.venv/
+.pytest_cache/
+__pycache__/
+*.egg-info/
+
+# LaTeX build files
+paper/*.aux
+paper/*.log
+paper/*.toc
+paper/*.out
+paper/*.fls
+paper/*.fdb_latexmk
