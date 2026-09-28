@@ -37,7 +37,7 @@ from scipy.optimize import brentq
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from calibrate_bnp import (  # noqa: E402
-    COLOR, DATA, ORDER, RES, SHORT, fit_cet1_ou, load_cet1_series, market_panel, settings,
+    BASE_SPREAD_VOL, COLOR, DATA, ORDER, RES, SHORT, base_cet1_dynamics, market_panel, settings,
 )
 
 from at1_coco.market import (  # noqa: E402
@@ -78,11 +78,11 @@ def price(prof, mkt, lam):
 def main():
     static = pd.read_csv(DATA / "bonds_static.csv", index_col="isin_144a")
     bonds = {i: DatedAT1.from_row(i, static.loc[i]) for i in ORDER}
-    kappa, sigma = fit_cet1_ou(load_cet1_series())
+    kappa, sigma = base_cet1_dynamics(verbose=True)
     panel = market_panel(curve="fred")
     long_run = float(panel.groupby("date")["refi"].first().mean())
     last = panel[panel["date"] == panel["date"].max()].set_index("isin")
-    ms = settings(kappa, sigma, 0.01, long_run)
+    ms = settings(kappa, sigma, BASE_SPREAD_VOL, long_run)
     randoms = default_randoms(n_paths=20_000)
 
     mkts = {i: MarketState(r.date, r.clean, r.disc_yield, r.reset_ref, r.refi, r.cet1, r.share_usd)
@@ -131,7 +131,10 @@ def main():
     tab.loc["market YTC spread"] = dec[dec.component == "market"].set_index("isin")["cum_spread_bp"][ORDER]
     print("\nspread decomposition (bp of yield to first call over the Treasury):")
     print(tab.round(1).to_string())
-    fig_decomposition(tab)
+    subtitle = (f"{val_date:%d %b %Y} · base case κ={kappa:.2f}, σ={sigma:.2f}, "
+                f"spread vol {1e4*ms.spread.vol:.0f}bp · implied PONV "
+                + " / ".join(f"{100*lam[i]:.2f}%" for i in ORDER))
+    fig_decomposition(tab, subtitle)
 
     # 2. call vs extension ------------------------------------------------------
     grid = np.arange(0.015, 0.0451, 0.0025)
@@ -145,7 +148,7 @@ def main():
                                   p_call_first=prof.diagnostics["p_call_first"]))
     calls = pd.DataFrame(call_rows)
     calls.to_csv(RES / "call_probability.csv", index=False)
-    fig_calls(calls, bonds, long_run)
+    fig_calls(calls, bonds, long_run, mkts[ORDER[0]].refi_spread, subtitle)
 
     print("\ncall vs extension (clean prices, same implied PONV):")
     ext_rows = []
@@ -219,70 +222,113 @@ def main():
     d = pc.pivot(index="cet1", columns="isin", values="clean")[ORDER].diff() / 0.5
     print("\ncapital delta (price points per +1pp CET1):")
     print(d.loc[[7.0, 9.0, 10.5, 11.0, 12.0, 13.0]].round(2).to_string())
-    fig_cet1_profile(pc, ms, mkts)
+    fig_cet1_profile(pc, ms, mkts, st.loc["CET1 -4.2pp = EBA adverse (capital only)", SHORT[ORDER[0]]], subtitle)
 
 
 # ---------------------------------------------------------------------------
-def fig_decomposition(tab):
+def fig_decomposition(tab, subtitle):
     comps = ["PONV / tail / liquidity", "MDA coupon cuts", "conversion", "extension"]
-    fig, ax = plt.subplots(figsize=(8.5, 3.4))
+    fig, ax = plt.subplots(figsize=(8.5, 3.6))
     y = np.arange(len(ORDER))[::-1]
     left = np.zeros(len(ORDER))
     for comp, col in zip(comps, COMP_COLORS):
         v = tab.loc[comp, ORDER].values
         ax.barh(y, v, left=left, color=col, height=0.55, label=comp, edgecolor=SURFACE, linewidth=2)
         for yi, (l, w) in enumerate(zip(left, v)):
-            if w >= 18:
-                ax.text(l + w / 2, y[yi], f"{w:.0f}", ha="center", va="center", color="white" if col != "#eda100" else INK, fontsize=9)
+            if w >= 15:
+                ax.text(l + w / 2, y[yi], f"{w:.0f}", ha="center", va="center",
+                        color="white" if col != "#eda100" else INK, fontsize=9)
         left += v
     mkt = tab.loc["market YTC spread", ORDER].values
-    for yi, m in enumerate(mkt):
+    for yi, (m, ext) in enumerate(zip(mkt, tab.loc["extension", ORDER].values)):
         ax.text(m + 4, y[yi], f"{m:.0f}bp", va="center", color=INK, fontsize=9, fontweight="bold")
+        ax.text(m + 4, y[yi] - 0.3, f"extension {ext:.0f}", va="center", color=INK2, fontsize=7.5)
     ax.set_yticks(y, [SHORT[i] for i in ORDER])
-    ax.set_xlabel("bp of yield to first call over Treasury")
-    ax.set_title("What the BNP AT1 spread pays for")
+    ax.set_xlabel("bp of yield to first call over the call-matched Treasury")
+    ax.set_title("What the BNP AT1 spread pays for", pad=22)
+    ax.text(0, 1.015, subtitle, transform=ax.transAxes, fontsize=8.5, color=INK2)
     ax.grid(axis="y", visible=False)
-    ax.set_xlim(0, max(mkt) * 1.15)
+    ax.set_xlim(0, max(mkt) * 1.22)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=4, fontsize=9)
     fig.tight_layout()
     fig.savefig(RES / "spread_decomposition.png", dpi=150)
     plt.close(fig)
 
 
-def fig_calls(calls, bonds, current):
-    fig, ax = plt.subplots(figsize=(8, 4))
+def fig_calls(calls, bonds, sample_avg, today, subtitle):
+    fig, ax = plt.subplots(figsize=(8, 4.2))
+    marks = []
     for i in ORDER:
-        g = calls[calls["isin"] == i]
+        g = calls[calls["isin"] == i].sort_values("new_issue_spread_bp")
         ax.plot(g["new_issue_spread_bp"], 100 * g["p_call_first"], color=COLOR[i], lw=2,
                 label=f"{SHORT[i]} (margin {1e4*bonds[i].reset_margin:.0f}bp)")
         ax.axvline(1e4 * bonds[i].reset_margin, color=COLOR[i], lw=0.8, ls=":")
-    ax.axvline(1e4 * current, color=INK2, lw=1.2, ls="--")
-    ax.annotate(f"sample-average\nAT1 spread ≈ {1e4*current:.0f}bp", (1e4 * current, 8), xytext=(-110, 0),
-                textcoords="offset points", color=INK2, fontsize=9)
-    ax.set_xlabel("New-issue AT1 spread level (bp), today and long-run")
+        p_today = 100 * np.interp(1e4 * today, g["new_issue_spread_bp"], g["p_call_first"])
+        ax.plot(1e4 * today, p_today, "o", color=COLOR[i], ms=7, zorder=3)
+        marks.append((p_today, i))
+    # labels to the left of today's line, pushed apart so they never overlap
+    marks.sort(reverse=True)
+    y_prev = None
+    for p_today, i in marks:
+        y_lab = p_today if y_prev is None else min(p_today, y_prev - 6)
+        y_prev = y_lab
+        ax.annotate(f"{SHORT[i].split()[0]}: {p_today:.0f}%", (1e4 * today, p_today),
+                    xytext=(1e4 * today - 8, y_lab), textcoords="data", ha="right", va="center",
+                    fontsize=8.5, color=COLOR[i], fontweight="bold",
+                    bbox=dict(fc=plt.rcParams["axes.facecolor"], ec="none", pad=1.5, alpha=0.9), zorder=5)
+    ax.axvline(1e4 * today, color=INK, lw=1.2)
+    ax.annotate(f"today\n{1e4*today:.0f}bp", (1e4 * today, 6), xytext=(-6, 0), textcoords="offset points",
+                ha="right", color=INK, fontsize=8.5)
+    ax.axvline(1e4 * sample_avg, color=INK2, lw=1, ls="--")
+    ax.annotate(f"sample avg\n{1e4*sample_avg:.0f}bp", (1e4 * sample_avg, 22), xytext=(-6, 0),
+                textcoords="offset points", ha="right", color=INK2, fontsize=8)
+    ax.set_xlabel("AT1 spread level (bp): today and long-run; dotted lines = reset margins")
     ax.set_ylabel("P(called at first reset) %")
     ax.set_ylim(0, 100)
-    ax.set_title("Will BNP call? Call probability vs AT1 spread level")
+    ax.set_title("Will BNP call? Call probability vs AT1 spread level", pad=22)
+    ax.text(0, 1.015, subtitle, transform=ax.transAxes, fontsize=8.5, color=INK2)
     ax.legend(loc="upper right", fontsize=9)
     fig.tight_layout()
     fig.savefig(RES / "call_probability.png", dpi=150)
     plt.close(fig)
 
 
-def fig_cet1_profile(pc, ms, mkts):
-    fig, ax = plt.subplots(figsize=(8, 4.2))
-    for i in ORDER:
-        g = pc[pc["isin"] == i]
-        ax.plot(g["cet1"], g["clean"], color=COLOR[i], lw=2, marker="o", ms=3, label=SHORT[i])
+def fig_cet1_profile(pc, ms, mkts, eba_shock, subtitle):
+    fig, ax = plt.subplots(figsize=(8, 4.4))
     top = ms.mda_threshold + ms.combined_buffer
-    ax.axvline(top, color=INK2, ls="--", lw=1.2)
-    ax.annotate(f"MDA threshold {top:.2f}%", (top, ax.get_ylim()[0]), xytext=(-122, 8), textcoords="offset points", color=INK2)
     today = mkts[ORDER[0]].cet1
+    ax.axvspan(pc["cet1"].min(), top, color="#eda100", alpha=0.08, lw=0)
+    for i in ORDER:
+        g = pc[pc["isin"] == i].sort_values("cet1")
+        ax.plot(g["cet1"], g["clean"], color=COLOR[i], lw=2, marker="o", ms=3, label=SHORT[i])
+        p_today = np.interp(today, g["cet1"], g["clean"])
+        ax.plot(today, p_today, "o", color=COLOR[i], ms=7, zorder=3)
+    # capital delta today and around the threshold, read off the curves (average of the bonds)
+    avg = pc.groupby("cet1")["clean"].mean()
+    d_today = (np.interp(today + 0.5, avg.index, avg.values) - np.interp(today - 0.5, avg.index, avg.values))
+    d_mda = (np.interp(top, avg.index, avg.values) - np.interp(top - 1, avg.index, avg.values))
+    ax.axvline(top, color=INK2, ls="--", lw=1.2)
     ax.axvline(today, color=INK2, lw=1)
-    ax.annotate(f"today {today:.2f}%", (today, ax.get_ylim()[0]), xytext=(5, 8), textcoords="offset points", color=INK2)
+    y0 = ax.get_ylim()[0]
+    ax.annotate(f"below MDA ({top:.2f}%):\n≈{d_mda:.1f}pt per pp", (top, y0), xytext=(-8, 10),
+                textcoords="offset points", ha="right", color=INK2, fontsize=8.5)
+    ax.annotate(f"today {today:.2f}%:\n≈{d_today:.2f}pt per pp", (today, y0), xytext=(6, 10),
+                textcoords="offset points", color=INK2, fontsize=8.5)
+    # EBA adverse depletion for the first bond
+    g = pc[pc["isin"] == ORDER[0]].sort_values("cet1")
+    x1 = today - 4.2
+    y_start, y_end = np.interp(today, g["cet1"], g["clean"]), np.interp(x1, g["cet1"], g["clean"])
+    ax.plot([x1, today], [y_end, y_end], color=INK, lw=0.9, ls=":")
+    ax.annotate("", (today, y_end), (today, y_start),
+                arrowprops=dict(arrowstyle="<->", color=INK, lw=1.1, shrinkA=4, shrinkB=0))
+    ax.plot(x1, y_end, "o", mfc="white", mec=COLOR[ORDER[0]], mew=2, ms=8, zorder=4)
+    ax.annotate(f"EBA adverse: CET1 −4.2pp to {x1:.1f}%\n{SHORT[ORDER[0]]}: {eba_shock:+.1f}pt",
+                (x1, y_end), xytext=(10, -14), textcoords="offset points", ha="left", va="top",
+                fontsize=8.5, color=INK, bbox=dict(fc=plt.rcParams["axes.facecolor"], ec="none", pad=1.5, alpha=0.9), zorder=5)
     ax.set_xlabel("CET1 ratio (%), everything else unchanged")
-    ax.set_ylabel("Model clean price")
-    ax.set_title("AT1 price vs BNP capital")
+    ax.set_ylabel("model clean price")
+    ax.set_title("AT1 price vs BNP capital: the MDA cliff", pad=22)
+    ax.text(0, 1.015, subtitle, transform=ax.transAxes, fontsize=8.5, color=INK2)
     ax.legend(loc="upper left", fontsize=9)
     fig.tight_layout()
     fig.savefig(RES / "price_vs_cet1.png", dpi=150)

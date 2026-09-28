@@ -60,7 +60,9 @@ BOND_COLOR = {"US05602XQR25": BLUE, "US05602XQS08": ORANGE, "US05602XQQ42": AQUA
 COMP_COLOR = [BLUE, ORANGE, AQUA, YELLOW]
 COMPS = ["PONV / tail / liquidity", "MDA coupon cuts", "conversion", "extension"]
 
-MDA, TRIGGER, CET1_TODAY = 10.51, 5.125, 12.97
+# filled from the data by load(): nothing below is typed by hand
+MDA = TRIGGER = CET1_TODAY = KAPPA = SIGMA = SPREAD_TODAY = None
+AS_OF = None
 
 plt.rcParams.update({
     "font.family": "sans-serif",
@@ -89,6 +91,18 @@ def window(p: float, a: float, b: float) -> float:
 # data
 # ---------------------------------------------------------------------------
 def load():
+    global MDA, TRIGGER, CET1_TODAY, KAPPA, SIGMA, SPREAD_TODAY, AS_OF
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from calibrate_bnp import DATA, base_cet1_dynamics, market_panel, settings
+
+    KAPPA, SIGMA = base_cet1_dynamics()                      # same base case as the analysis
+    ms = settings(KAPPA, SIGMA, 0.01, 0.03)
+    MDA = ms.mda_threshold + ms.combined_buffer
+    TRIGGER = float(pd.read_csv(DATA / "bonds_static.csv")["trigger_level_pct"].iloc[0])
+    panel = market_panel(curve="fred")
+    last = panel[panel["date"] == panel["date"].max()]
+    AS_OF, CET1_TODAY, SPREAD_TODAY = last["date"].iloc[0], float(last["cet1"].iloc[0]), float(last["refi"].iloc[0])
+
     dec = pd.read_csv(RES / "spread_decomposition.csv")
     tab = dec[dec["component"].isin(COMPS)].pivot(index="component", columns="isin",
                                                   values="contribution_bp").loc[COMPS, ORDER]
@@ -96,7 +110,7 @@ def load():
     pvc = pd.read_csv(RES / "price_vs_cet1.csv")
     calls = pd.read_csv(RES / "call_probability.csv")
 
-    params = CET1Params(c0=CET1_TODAY, kappa=0.32, theta=13.0, sigma=0.41, jump_intensity=0.12,
+    params = CET1Params(c0=CET1_TODAY, kappa=KAPPA, theta=13.0, sigma=SIGMA, jump_intensity=0.12,
                         jump_median=2.2, jump_vol=0.5, ponv_intensity=0.0)
     years, dt, n = 10, 1 / 12, 4000
     sim = simulate_cet1(params, TRIGGER, years, dt, draw_randoms(n, int(years / dt), seed=11))
@@ -111,8 +125,8 @@ def frame(fig, title, subtitle, alpha, rect=(0.12, 0.16, 0.8, 0.66)):
     fig.text(0.075, 0.925, title, fontsize=34, fontweight="bold", color=INK, alpha=alpha)
     fig.text(0.075, 0.888, subtitle, fontsize=18, color=INK2, alpha=alpha)
     if SHOW_SOURCE:
-        fig.text(0.075, 0.035, "BNP Paribas USD AT1s · Sep 2026 · Source: S&P Capital IQ, BNP Paribas, "
-                 "EBA, FRED; author's model", fontsize=12, color=INK3, alpha=alpha)
+        fig.text(0.075, 0.035, f"BNP Paribas USD AT1s · {AS_OF:%d %b %Y} · Source: S&P Capital IQ, "
+                 "BNP Paribas, EBA, FRED; author's model", fontsize=12, color=INK3, alpha=alpha)
     ax = fig.add_axes(list(rect))
     ax.grid(axis="y", color=GRID, lw=1)
     ax.set_axisbelow(True)
@@ -124,10 +138,11 @@ def frame(fig, title, subtitle, alpha, rect=(0.12, 0.16, 0.8, 0.66)):
 # ---------------------------------------------------------------------------
 def scene_fan(paths, times, bands):
     sample = paths[:14]
+    p_mda = float(np.mean((paths < MDA).any(axis=1)))
 
     def draw(fig, p, a):
         ax = frame(fig, "Simulating BNP's capital",
-                   "CET1 ratio, 4,000 paths · mean-reverting with stress jumps", a)
+                   f"CET1 from {CET1_TODAY:.2f}% today · 4,000 paths · κ={KAPPA:.2f}, σ={SIGMA:.2f}", a)
         g = window(p, 0.05, 0.75)
         k = max(2, int(g * len(times)))
         t = times[:k]
@@ -145,6 +160,8 @@ def scene_fan(paths, times, bands):
         ax.text(9.95, TRIGGER + 0.25, "AT1 trigger", ha="right", color=RED, fontsize=16, alpha=la)
         la2 = window(p, 0.75, 0.9) * a
         ax.text(0.15, 16.2, "5–95% range", color=INK3, fontsize=14, alpha=la2)
+        ax.text(9.95, TRIGGER + 1.4, f"{p_mda:.0%} of paths dip below the MDA threshold",
+                ha="right", color=INK2, fontsize=15, alpha=la2)
         ax.set_xlim(0, 10)
         ax.set_ylim(4, 17)
         ax.set_xlabel("years ahead")
@@ -154,8 +171,10 @@ def scene_fan(paths, times, bands):
 
 def scene_breakdown(tab, total):
     def draw(fig, p, a):
+        share = tab.loc["PONV / tail / liquidity"].sum() / total.sum()
         ax = frame(fig, "What the spread pays for",
-                   "Yield-to-call spread over Treasuries, bp", a, rect=(0.22, 0.22, 0.7, 0.6))
+                   f"Yield-to-call spread over Treasuries, bp · {share:.0%} is PONV / tail premium",
+                   a, rect=(0.22, 0.22, 0.7, 0.6))
         y = np.arange(len(ORDER))[::-1] * 1.25
         left = np.zeros(len(ORDER))
         for j, comp in enumerate(COMPS):
@@ -188,9 +207,13 @@ def scene_breakdown(tab, total):
 
 
 def scene_cliff(pvc):
+    avg = pvc.groupby("cet1")["clean"].mean()
+    d_today = np.interp(CET1_TODAY + 0.5, avg.index, avg.values) - np.interp(CET1_TODAY - 0.5, avg.index, avg.values)
+    d_mda = np.interp(MDA, avg.index, avg.values) - np.interp(MDA - 1, avg.index, avg.values)
+
     def draw(fig, p, a):
         ax = frame(fig, "The capital cliff",
-                   "Model price as BNP's CET1 ratio falls, all else equal", a)
+                   f"Price per point of CET1: ≈{d_today:.1f}pt today → ≈{d_mda:.1f}pt below the MDA threshold", a)
         ra = window(p, 0.0, 0.2) * a
         ax.axvspan(pvc["cet1"].min(), MDA, color=YELLOW, alpha=0.07 * ra, lw=0)
         ax.axvline(MDA, color=YELLOW, lw=2, ls=(0, (6, 4)), alpha=ra)
@@ -221,8 +244,10 @@ def scene_cliff(pvc):
 def scene_calls(calls):
     def draw(fig, p, a):
         ax = frame(fig, "Will BNP call?",
-                   "Probability of a call at the first reset vs the AT1 spread level", a)
+                   f"Probability of a call at the first reset vs the AT1 spread level · today {1e4*SPREAD_TODAY:.0f}bp", a)
         g = window(p, 0.1, 0.8)
+        ta = window(p, 0.8, 0.92) * a
+        ax.axvline(1e4 * SPREAD_TODAY, color=INK3, lw=1.5, alpha=ta)
         for isin in ORDER:
             d = calls[calls["isin"] == isin].sort_values("new_issue_spread_bp")
             xs = np.linspace(d["new_issue_spread_bp"].min(), d["new_issue_spread_bp"].max(), 300)
@@ -230,6 +255,11 @@ def scene_calls(calls):
             k = max(2, int(g * len(xs)))
             ax.plot(xs[:k], ys[:k], color=BOND_COLOR[isin], lw=3.2, alpha=a, label=SHORT[isin])
             ax.plot(xs[k - 1], ys[k - 1], "o", color=BOND_COLOR[isin], ms=9, alpha=a)
+            p_now = 100 * np.interp(1e4 * SPREAD_TODAY, d["new_issue_spread_bp"], d["p_call_first"])
+            ax.plot(1e4 * SPREAD_TODAY, p_now, "o", color=BOND_COLOR[isin], ms=13, alpha=ta,
+                    markeredgecolor=INK, markeredgewidth=1.5)
+            ax.text(1e4 * SPREAD_TODAY + 6, p_now, f"{p_now:.0f}%", va="center", fontsize=15,
+                    color=BOND_COLOR[isin], fontweight="bold", alpha=ta)
         ax.set_ylim(0, 100)
         ax.set_xlim(calls["new_issue_spread_bp"].min(), calls["new_issue_spread_bp"].max())
         ax.set_xlabel("AT1 spread level (bp)")

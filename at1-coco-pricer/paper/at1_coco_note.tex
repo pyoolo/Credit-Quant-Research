@@ -28,13 +28,17 @@ refinancing is cheaper. We take the Common Equity Tier~1 (CET1) ratio as the
 state variable, add a mean-reverting issuer spread that drives both the call
 decision and the regulatory write-down (PONV) hazard, and price by Monte Carlo
 with the PONV hazard integrated analytically along each path. Calibrated to
-BNP Paribas's three USD AT1s (September 2026), one implied hazard of about
-$2.3\%$ a year prices all three bonds, and the cross-section identifies the
-volatility of the refinancing spread. About $238$bp of the $\approx 270$bp
-spread is compensation for PONV, tail and liquidity risk; mechanical conversion
-explains $\approx4$bp. The price is flat in capital above the MDA threshold
-($\approx0.5$ points per point of CET1) and steep below it ($\approx4$--$5$
-points).
+BNP Paribas's three USD AT1s (September 2026), with the FRED Treasury curve
+and 50 quarters of CET1 history, one implied hazard of about $2.3\%$ a year
+prices all three bonds. About $240$bp of the $\approx 270$--$280$bp spread is
+compensation for PONV, tail and liquidity risk; mechanical conversion explains
+$\approx4$bp. The price is flat in capital above the MDA threshold
+($\approx0.45$ points per point of CET1) and steep around it ($\approx4$
+points). A bootstrap shows that the speed of capital mean reversion is the
+weakest input: the half-life of a capital shock is anywhere between 1.5 and 11
+years, and the capital stress results scale by a factor of six across that
+range. The bond cross-section is consistent only with the faster end, which
+sets the base case.
 \end{abstract}
 
 \tableofcontents
@@ -257,15 +261,20 @@ P\&L, spread components) therefore carry no Monte Carlo noise of their own.
 %======================================================================
 
 \subsection{Capital dynamics from history}
-The CET1 series combines annual data (2014--2023) with quarterly data
-(2024Q1--2026Q2): 20 observations. The OU transition density is Gaussian for
-any step $\Delta_k$,
+The CET1 series is quarterly from 2014Q1 to 2026Q2 (50 observations). Earlier
+data follow Basel~II/2.5 definitions and are not comparable. The 2023Q1 change
+(+1.2pp, sale of Bank of the West) is a disposal, not a capital shock, and that
+transition is excluded from the likelihood. The OU transition density is
+Gaussian for any step $\Delta_k$,
 \[
   C_{k+1}\mid C_k \sim N\!\Bigl(\theta+(C_k-\theta)e^{-\kappa\Delta_k},\
   \tfrac{\sigma^2}{2\kappa}\bigl(1-e^{-2\kappa\Delta_k}\bigr)\Bigr),
 \]
-so the mixed-frequency likelihood is exact. Fixing $\theta=13\%$ (BNP's target)
-gives $\hat\kappa=0.32$ and $\hat\sigma=0.41$pp$/\sqrt{\text{yr}}$. The jumps
+so the likelihood is exact. Fixing $\theta=13\%$ (BNP's target) gives
+$\hat\kappa=0.165$ and $\hat\sigma=0.44$pp$/\sqrt{\text{yr}}$; $\kappa$ is weakly
+identified and the base case uses $\kappa=0.35$ (\S\ref{sec:uncert}), with
+$\sigma=0.47$ re-estimated given $\kappa$. The 2014Q2 fall of $0.76$pp (US
+sanctions settlement) is an example of the stress events the jumps represent. The jumps
 cannot be identified from this sample; we use $\lambda_J=0.12$, $m_J=2.2$pp,
 $\sigma_J=0.5$, whose 95th-percentile jump (4.4pp) matches BNP's CET1 depletion
 in the EBA 2025 adverse scenario (4.2pp, fully loaded).
@@ -277,28 +286,27 @@ systemic-risk buffers), so $\bmda=10.51\%$. The trigger is $\ctrig=5.125\%$ of
 group CET1.
 
 \subsection{Market inputs}
-The inputs come from Capital IQ evaluated prices:
+The inputs are:
 \begin{itemize}
-  \item the clean price of each bond;
-  \item the Treasury yield, recovered as \emph{yield minus spread to
-  benchmark}. One continuous $\sim$10-year series is used for all bonds,
-  because Capital IQ changes the benchmark of one bond twice in the sample;
-  \item the average AT1 spread $S_0$;
+  \item the clean price of each bond (Capital IQ evaluated prices);
+  \item the FRED constant-maturity Treasury curve (DGS5, DGS7, DGS10): the 5-year
+  CMT is the reset reference, and each bond is discounted at the yield
+  interpolated at its first call date;
+  \item the AT1 spread $S_0$, the average of (bond yield $-$ call-matched Treasury);
   \item the latest published CET1 ratio, with a 35-day publication lag;
   \item the share price.
 \end{itemize}
-The spread process uses $a=0.5$, $\bar s$ equal to the sample mean (270bp) and
-$\rho=-0.3$; the capital premium is $\beta=1\%$ per point of CET1 and the share
+The spread process uses $a=0.5$, $\bar s$ equal to the sample mean (275bp),
+$\eta=100$bp and $\rho=-0.3$; the capital premium is $\beta=1\%$ per point of CET1 and the share
 stress is $\xi=0.2$.
 
 \subsection{Implied hazard and cross-sectional identification}
 For each date and bond $j$ we solve $V_0^{(j)}(\lambda_j)=P_j$. The three bonds
 share issuer, capital and trigger, so a correct model should give
 $\lambda_1=\lambda_2=\lambda_3$. The dispersion
-$D(\eta)=\max_j\lambda_j-\min_j\lambda_j$ is a specification test. Minimising it
-over the spread volatility $\eta$ identifies the volatility with which the
-market prices the issuer's call option: two unknowns ($\lambda,\eta$), three
-prices.
+$D=\max_j\lambda_j-\min_j\lambda_j$ is a specification test, and it can be
+used to ask which values of the other parameters (the spread volatility $\eta$,
+the capital mean reversion $\kappa$) the three prices are consistent with.
 
 %======================================================================
 \section{Analytics}
@@ -343,11 +351,15 @@ $\partial V/\partial C_0$ is a finite difference on a grid of $C_0$.
 \subsection{Capital}
 \begin{figure}[H]
 \centering\includegraphics[width=0.8\textwidth]{bnp_cet1_history.png}
-\caption{CET1 ratio, CET1 requirement (MDA threshold) and AT1 trigger.}
+\caption{CET1 ratio since 2014, CET1 requirement (MDA threshold), AT1 trigger and
+the base-case 5-year outlook (median, 50\% and 90\% bands of the simulated CET1).}
 \end{figure}
 CET1 was $12.97\%$ at June 2026 against a $10.43\%$ requirement: a cushion of
 $2.5$pp ($\approx$\,EUR~20bn). The trigger is $7.8$pp lower
-($\approx$\,EUR~62bn of losses).
+($\approx$\,EUR~62bn of losses). Under the base-case dynamics, about $20\%$ of the
+simulated paths fall below the MDA threshold at some point in the next five
+years, while the trigger is almost never reached by diffusion alone: capital
+risk for these bonds is first a coupon risk, then a conversion risk.
 
 \subsection{The three bonds and the implied hazard}
 \begin{table}[H]
@@ -358,13 +370,13 @@ $2.5$pp ($\approx$\,EUR~20bn). The trigger is $7.8$pp lower
 \midrule
 Reset margin (bp) & 285 & 294 & 313 \\
 Clean price & 94.39 & 95.25 & 97.57 \\
-Model price with $\lambda=0$ & 114.1 & 117.5 & 117.8 \\
-Implied hazard $\lambda$ (\%/yr) & 2.30 & 2.33 & 2.30 \\
-$\Pr(\text{called at } T_1)$ & 52\% & 55\% & 61\% \\
-Lifetime $\Pr(\text{conversion})$ & 1.4\% & 1.6\% & 1.4\% \\
+Model price with $\lambda=0$ & 114.8 & 117.6 & 118.2 \\
+Implied hazard $\lambda$ (\%/yr) & 2.33 & 2.31 & 2.31 \\
+$\Pr(\text{called at } T_1)$ & 51\% & 53\% & 60\% \\
+Lifetime $\Pr(\text{conversion})$ & 1.3\% & 1.5\% & 1.3\% \\
 \bottomrule
 \end{tabular}
-\caption{Last date, $\eta=100$bp.}
+\caption{Last date, base case ($\kappa=0.35$, $\eta=100$bp).}
 \end{table}
 
 Dispersion of the implied hazards across the three bonds, by spread volatility:
@@ -373,13 +385,16 @@ Dispersion of the implied hazards across the three bonds, by spread volatility:
 \toprule
 $\eta$ (bp) & 0 & 25 & 50 & 75 & 100 & 150 & 200\\
 \midrule
-$D(\eta)$ (bp of hazard) & 4.8 & 4.6 & 3.6 & 2.8 & \textbf{2.7} & 3.5 & 4.0\\
+$D(\eta)$ (bp of hazard) & 8.3 & 6.0 & 4.1 & 2.9 & \textbf{2.3} & 1.5 & 1.0\\
 \bottomrule
 \end{tabular}
 \end{center}
-The dispersion is U-shaped, so the cross-section identifies
-$\eta\approx75$--$100$bp. Over 66 weekly dates, the mean dispersion falls from
-$8.2$bp (deterministic spread) to $6.0$bp (stochastic spread).
+A stochastic refinancing spread is clearly needed (8.3bp with a deterministic
+one), but the dispersion keeps falling as $\eta$ rises, so the cross-section does
+not pin $\eta$ down; $100$bp is kept as an assumption. Over 66 weekly dates the
+mean dispersion is $6.0$bp against $9.6$bp for the deterministic rule. With
+Capital IQ benchmark proxies instead of the FRED curve the last-date dispersion
+is $2.7$--$7.6$bp.
 
 \begin{figure}[H]
 \centering\includegraphics[width=\textwidth]{implied_ponv.png}
@@ -393,23 +408,24 @@ $8.2$bp (deterministic spread) to $6.0$bp (stochastic spread).
 \toprule
 bp of yield-to-call spread & 6.875\% NC33 & 7.20\% NC36 & 7.45\% NC35 \\
 \midrule
-PONV / tail / liquidity & 238 & 241 & 237 \\
-MDA coupon cuts & 21 & 24 & 24 \\
+PONV / tail / liquidity & 243 & 240 & 239 \\
+MDA coupon cuts & 20 & 22 & 22 \\
 Conversion at the trigger & 4 & 5 & 4 \\
-Extension & 10 & 6 & 3 \\
+Extension & 12 & 7 & 4 \\
 \midrule
-Total $=$ market & 273 & 275 & 268 \\
+Total $=$ market & 279 & 274 & 269 \\
 \bottomrule
 \end{tabular}
 \end{table}
 \begin{figure}[H]
 \centering\includegraphics[width=0.85\textwidth]{spread_decomposition.png}
 \end{figure}
-With BNP's historical capital volatility, mechanical conversion is a
-1.4--1.6\% lifetime event worth $\approx4$bp. Almost all of the spread is
+With BNP's capital dynamics, mechanical conversion is a 1.3--1.5\% lifetime
+event worth $\approx4$bp. Almost all of the spread is
 compensation for regulatory write-down before the trigger, tail risk beyond the
 historical sample, and liquidity. The extension component decreases with the
-reset margin, as the theory requires.
+reset margin, as the theory requires. The split between the premium and the
+MDA component depends on $\kappa$ (\S\ref{sec:uncert}); the total does not.
 
 \subsection{Call and extension}
 \begin{table}[H]
@@ -418,18 +434,19 @@ reset margin, as the theory requires.
 \toprule
  & 6.875\% NC33 & 7.20\% NC36 & 7.45\% NC35 \\
 \midrule
-Margin $-$ today's AT1 spread (bp) & $+8$ & $+17$ & $+36$ \\
-Cost of the issuer's option (pts) & 0.51 & 0.38 & 0.20 \\
-P\&L, spreads $+50$bp (pts) & $-3.3$ & $-3.6$ & $-3.2$ \\
-\quad of which from extension (pts) & $-1.0$ & $-0.8$ & $-0.6$ \\
+Margin $-$ today's AT1 spread (bp) & $+6$ & $+15$ & $+34$ \\
+Cost of the issuer's option (pts) & 0.63 & 0.47 & 0.26 \\
+P\&L, spreads $+50$bp (pts) & $-3.4$ & $-3.6$ & $-3.3$ \\
+\quad of which from extension (pts) & $-1.2$ & $-0.9$ & $-0.7$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 \begin{figure}[H]
 \centering\includegraphics[width=0.8\textwidth]{call_probability.png}
 \end{figure}
-The low-margin bond is the most negatively convex. In the September 2026
-sell-off its spread widened by $35$bp, against $12$--$14$bp for the other two.
+The low-margin bond is the most negatively convex. In the four weeks to 25 September 2026 the 10y Treasury rose $45$bp; on top of
+that, the spread of the 6.875\% widened by $34$bp, against $10$--$12$bp for the
+other two.
 
 \subsection{Stress and the capital cliff}
 \begin{table}[H]
@@ -439,23 +456,77 @@ sell-off its spread widened by $35$bp, against $12$--$14$bp for the other two.
 Clean price change (points) & 6.875\% NC33 & 7.20\% NC36 & 7.45\% NC35 \\
 \midrule
 Rates $+100$bp & $-5.2$ & $-6.3$ & $-6.1$ \\
-CET1 $-2$pp & $-1.3$ & $-1.4$ & $-1.4$ \\
-CET1 $-4.2$pp (EBA adverse) & $-9.2$ & $-10.4$ & $-9.8$ \\
-AT1 spreads $+200$bp & $-16.5$ & $-16.7$ & $-15.7$ \\
-EBA adverse $+$ spreads $+200$bp & $-24.9$ & $-26.2$ & $-24.8$ \\
-PONV hazard $\times3$ & $-26.3$ & $-28.9$ & $-27.6$ \\
+CET1 $-2$pp & $-1.2$ & $-1.2$ & $-1.2$ \\
+CET1 $-4.2$pp (EBA adverse) & $-8.3$ & $-9.5$ & $-8.9$ \\
+AT1 spreads $+200$bp & $-16.9$ & $-16.8$ & $-16.0$ \\
+EBA adverse $+$ spreads $+200$bp & $-24.6$ & $-25.6$ & $-24.2$ \\
+PONV hazard $\times3$ & $-26.8$ & $-29.0$ & $-27.9$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 \begin{figure}[H]
 \centering\includegraphics[width=0.8\textwidth]{price_vs_cet1.png}
 \end{figure}
-The capital delta is $\approx0.5$ points per point of CET1 at $13\%$ and
-$\approx4$--$5$ below the MDA threshold. Crossing $\bmda$ switches on three
+The capital delta is $\approx0.45$ points per point of CET1 at $13\%$ and
+$\approx4$ around and below the MDA threshold. Crossing $\bmda$ switches on three
 mechanisms at once: coupons are cut by \eqref{eq:mda}, the call is blocked by
 \eqref{eq:call}, and the hazard rises through \eqref{eq:seff}--\eqref{eq:hazard}.
 For risk management, the distance that matters is the distance to the MDA
 threshold, not to the trigger.
+
+\subsection{How much can we trust the capital parameters?}\label{sec:uncert}
+\textbf{Bootstrap.} We simulate 1{,}000 CET1 histories on the observed quarterly
+dates with the fitted dynamics and re-estimate $(\kappa,\sigma)$ on each. The 90\%
+intervals are $\kappa\in[0.06,\,0.48]$ and $\sigma\in[0.37,\,0.52]$: volatility
+is well estimated, the speed of capital rebuilding is not. The half-life of a
+capital shock, $\ln 2/\kappa$, lies between 1.5 and 11 years (point estimate 4.2).
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Average of the three bonds & $\kappa=0.06$ & $\kappa=0.165$ & $\kappa=0.35$ & $\kappa=0.48$ \\
+ & (5\%) & (history) & (base) & (95\%) \\
+\midrule
+Implied PONV (\%/yr) & 0.9 & 1.9 & 2.3 & 2.4 \\
+MDA coupon cost (pts) & 10.9 & 4.4 & 1.7 & 1.2 \\
+Capital delta at the MDA threshold (pts/pp) & 12.9 & 7.0 & 3.3 & 2.3 \\
+EBA adverse shock (pts) & $-35.6$ & $-18.7$ & $-8.9$ & $-6.4$ \\
+Cross-bond dispersion $D$ (bp) & 8.6 & 4.0 & 2.3 & 1.9 \\
+History log-likelihood (relative to MLE) & $-0.5$ & $0$ & $-1.5$ & $-4.1$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering\includegraphics[width=\textwidth]{parameter_uncertainty.png}
+\caption{Left: bootstrap of $(\kappa,\sigma)$. Centre: headline results across the
+$\kappa$ range. Right: cross-bond dispersion of the implied hazard against $\kappa$.}
+\end{figure}
+
+\textbf{What prices add.} History and prices pull in opposite directions. The
+three bonds are mutually consistent only for fast capital rebuilding: $D$ falls
+from 8.6bp at $\kappa=0.06$ to 1.9bp at $0.48$ and then flattens. The history,
+however, rejects values much above 0.35. The base case $\kappa=0.35$
+(half-life two years) lies inside the historical interval and close to the
+market plateau. It is also consistent with BNP's active capital management (a
+13\% target, managed RWA and distributions). The ordering of the bonds, the
+extension ranking and the steepening of the capital delta near the MDA threshold
+hold across the whole range. The level of the capital stress and the
+premium--MDA split do not, and are reported with this range.
+
+\textbf{Where the uncertainty sits.} Each curve in Figure~\ref{fig:cliffunc} is
+re-calibrated to today's price of the 6.875\%, so all four scenarios agree at
+today's $13\%$ CET1 (94.4). They separate only as capital falls: at the MDA
+threshold the price ranges from 80 ($\kappa=0.06$) to 93 ($\kappa=0.48$), and at
+$6\%$ CET1 from 36 to 79. Prices identify the level of risk today, not the shape
+of the cliff.
+\begin{figure}[H]
+\centering\includegraphics[width=0.8\textwidth]{capital_cliff_uncertainty.png}
+\caption{Price of the 6.875\% NC33 against CET1 for four values of $\kappa$, each
+re-calibrated to today's price. Shaded: 90\% bootstrap range of $\kappa$.}
+\label{fig:cliffunc}
+\end{figure}
 
 %======================================================================
 \section{Limitations and extensions}
@@ -464,10 +535,12 @@ threshold, not to the trigger.
   \item \textbf{Measure.} CET1 is not traded. Its dynamics are estimated under
   the physical measure, and all remaining risk premia are absorbed by $\lambda$,
   which is therefore a risk-neutral hazard, not a default probability.
-  \item \textbf{Rates.} The curve is flat and non-stochastic, and the 5-year
-  reset rate is proxied by the $\sim$10-year Treasury. The curve choice moves
-  the cross-bond dispersion from 2.7bp to 8bp. A proper curve (FRED DGS5,
-  DGS7, DGS10) and a short-rate model (Hull--White) are the first extensions.
+  \item \textbf{Capital mean reversion.} $\kappa$ is weakly identified by 50
+  quarters of history and drives the capital stress results
+  (\S\ref{sec:uncert}); the base case combines history and prices.
+  \item \textbf{Rates.} Today's FRED curve is used for all future resets; a
+  short-rate model (Hull--White) would add rate-driven extension.
+  \item \textbf{Spread volatility.} $\eta$ is not pinned down by the cross-section.
   \item \textbf{Capital premium.} $\beta$ controls the size of the capital cliff
   and is assumed. A cross-bank regression of AT1 spreads on MDA distance would
   calibrate it.
@@ -485,12 +558,12 @@ threshold, not to the trigger.
 \toprule
 Symbol & Meaning & Value & Source \\
 \midrule
-$\kappa,\sigma$ & CET1 mean reversion, volatility & 0.32, 0.41pp & MLE, 2014--2026 \\
+$\kappa,\sigma$ & CET1 mean reversion, volatility & 0.35, 0.47pp & MLE 0.165/0.44; base (\S\ref{sec:uncert}) \\
 $\theta$ & CET1 target & 13\% & BNP strategic plan \\
 $\lambda_J, m_J, \sigma_J$ & stress jumps & 0.12, 2.2pp, 0.5 & EBA 2025 check \\
 $b, w$ & MDA floor, combined buffer & 5.64\%, 4.87\% & requirement stack \\
 $\ctrig$ & trigger & 5.125\% & term sheets \\
-$a, \bar s, \eta, \rho$ & spread OU & 0.5, 270bp, 100bp, $-0.3$ & sample, cross-section \\
+$a, \bar s, \eta, \rho$ & spread OU & 0.5, 275bp, 100bp, $-0.3$ & sample, assumption \\
 $\beta$ & capital premium & 1\% per pp & assumption \\
 $\xi$ & share at trigger / today & 0.2 & assumption \\
 $\lambda$ & PONV hazard today & $\approx2.3\%$ & implied \\
@@ -511,6 +584,7 @@ File & Content \\
 \texttt{market.py} & dated bonds, \eqref{eq:spread}--\eqref{eq:hazard}, pricing \eqref{eq:cmc}, implied $\lambda$ \\
 \texttt{calibrate\_bnp.py} & calibration (\S\ref{sec:calib}) \\
 \texttt{spread\_and\_stress.py} & decomposition, call analysis, stress \\
+\texttt{parameter\_uncertainty.py} & bootstrap, $\kappa$ sensitivity (\S\ref{sec:uncert}) \\
 \bottomrule
 \end{tabular}
 \end{center}

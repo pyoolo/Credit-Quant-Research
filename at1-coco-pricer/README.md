@@ -21,11 +21,12 @@ loss-absorption probability all move together off one economically meaningful
 driver.
 
 **Case study → [RESEARCH.md](RESEARCH.md):** the model calibrated to BNP Paribas's
-three USD AT1s (Capital IQ prices, CET1 history, EBA stress test). It decomposes
-the ~270bp spread (≈238bp PONV/tail premium, ≈22bp MDA coupon cuts, ≈4bp
-conversion, 3–10bp extension), prices the first call as a 52–61% event, and shows
-the capital cliff: ~0.5pt per point of CET1 today, ~4–5pt below the MDA threshold.
-One implied PONV hazard (~2.3%/yr) prices all three bonds.
+three USD AT1s (Capital IQ prices, 50 quarters of CET1, FRED Treasury curve, EBA
+stress test). It decomposes the ~270bp spread (≈240bp PONV/tail premium, ≈21bp MDA
+coupon cuts, ≈4bp conversion, 4–12bp extension), prices the first call as a 51–60%
+event, and shows the capital cliff: ~0.45pt per point of CET1 today, ~4pt around the
+MDA threshold. A bootstrap shows the speed of capital mean reversion is the weakest
+input, and the bond prices help pin it down.
 
 ## Why this framing
 
@@ -70,7 +71,9 @@ at1-coco-pricer/
 │   ├── build_dataset.py     ← Capital IQ exports -> tidy CSVs
 │   ├── market_analysis.py   ← capital and price analysis
 │   ├── calibrate_bnp.py     ← implied PONV and cross-bond test
-│   └── spread_and_stress.py ← spread decomposition, call odds, stress tests
+│   ├── spread_and_stress.py ← spread decomposition, call odds, stress tests
+│   ├── parameter_uncertainty.py ← bootstrap of CET1 dynamics, kappa sensitivity
+│   └── make_video.py        ← animated charts
 ├── data/                ← term sheets + public data (CIQ data kept local)
 └── results/             ← generated figures
 ```

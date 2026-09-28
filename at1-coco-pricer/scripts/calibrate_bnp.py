@@ -5,8 +5,9 @@ Steps
 1. Historical CET1 dynamics: exact-OU maximum likelihood on the CET1 series
    (annual 2014-2023, quarterly 2024-2026), long-run level fixed at the 13%
    management target.
-2. Market inputs per date: prices, Treasury yields (from CIQ benchmark
-   spreads), the current AT1 spread, latest CET1, share price.
+2. Market inputs per date: prices, the FRED Treasury curve (5y CMT for the
+   reset, call-matched yield for discounting; file ``data/fred_treasury.csv``),
+   the current AT1 spread, latest CET1, share price.
 3. Implied PONV hazard for each bond on each date.  If the model captured the
    bonds' relative value, the three implied hazards would coincide (same issuer,
    same capital, same trigger).  The gap between them is the test.
@@ -18,13 +19,16 @@ Outputs: ``results/calibration_*.csv`` and ``results/implied_ponv.png``.
 
 from __future__ import annotations
 
+import sys
 from dataclasses import replace
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))   # find at1_coco without install
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from scipy.optimize import minimize
+from scipy.optimize import minimize, minimize_scalar
 
 from at1_coco import CET1Params
 from at1_coco.market import (
@@ -44,26 +48,77 @@ EURUSD = 1.15
 
 
 # ---------------------------------------------------------------------------
+BASEL3_START = "2014-01-01"      # CET1 as defined today exists from Basel III (2014)
+# quarters whose change is a disposal, not a capital shock: excluded from the fit
+ONE_OFF_QUARTERS = ["2023-03-31"]  # sale of Bank of the West (+1.2pp)
+
+
 def load_cet1_series() -> pd.Series:
+    """Quarterly CET1 ratio since Basel III (2014Q1-2026Q2, ~50 observations)."""
     q = pd.read_csv(DATA / "bnp_cet1_quarterly.csv", parse_dates=["date"], index_col="date")["cet1_ratio"]
-    a = pd.read_csv(DATA / "bnp_capital_annual.csv", parse_dates=["date"], index_col="date")["cet1_ratio"]
-    return pd.concat([a[a.index < q.index.min()], q]).sort_index()
+    return q.dropna()[q.dropna().index >= BASEL3_START]
 
 
-def fit_cet1_ou(c: pd.Series, theta: float = 13.0) -> tuple[float, float]:
+def fit_cet1_ou(c: pd.Series, theta: float = 13.0,
+                skip: list[str] = ONE_OFF_QUARTERS) -> tuple[float, float]:
+    """Exact-OU maximum likelihood; transitions ending on ``skip`` dates are ignored."""
     t = np.asarray((c.index - c.index[0]).days / 365.25)
     x = c.values
+    keep = ~np.isin(c.index[1:], pd.to_datetime(skip))
 
     def nll(p):
         k, s = np.exp(p)
         dt = np.diff(t)
         m = theta + (x[:-1] - theta) * np.exp(-k * dt)
         v = s * s * (1 - np.exp(-2 * k * dt)) / (2 * k)
-        return 0.5 * np.sum(np.log(2 * np.pi * v) + (x[1:] - m) ** 2 / v)
+        return 0.5 * np.sum((np.log(2 * np.pi * v) + (x[1:] - m) ** 2 / v)[keep])
 
     r = minimize(nll, np.log([0.5, 0.5]), method="Nelder-Mead")
     k, s = np.exp(r.x)
     return float(k), float(s)
+
+
+# Base-case speed of capital mean reversion.  History alone gives 0.165
+# (90% bootstrap CI 0.06-0.48); the three bond prices are only mutually
+# consistent for faster mean reversion (see parameter_uncertainty.py).  0.35 is
+# inside the historical CI and close to the market plateau: the value both
+# sources of information can live with.  sigma is re-estimated given kappa.
+BASE_KAPPA = 0.35
+
+# Base-case volatility of the new-issue AT1 spread (decimal).  With the FRED
+# curve the cross-bond gap keeps shrinking as this vol rises (no interior
+# minimum), so the data do not pin it down: 100bp is an assumption, shown with
+# its sensitivity grid in the calibration output.
+BASE_SPREAD_VOL = 0.01
+
+
+def sigma_given_kappa(c: pd.Series, kappa: float, theta: float = 13.0,
+                      skip: list[str] = ONE_OFF_QUARTERS) -> float:
+    """Maximum-likelihood sigma of the CET1 OU process for a fixed kappa."""
+    t = np.asarray((c.index - c.index[0]).days / 365.25)
+    x = c.values
+    keep = ~np.isin(c.index[1:], pd.to_datetime(skip))
+    dt = np.diff(t)
+    m = theta + (x[:-1] - theta) * np.exp(-kappa * dt)
+    w = (1 - np.exp(-2 * kappa * dt)) / (2 * kappa)
+
+    def nll(ls):
+        v = np.exp(2 * ls) * w
+        return 0.5 * np.sum((np.log(2 * np.pi * v) + (x[1:] - m) ** 2 / v)[keep])
+
+    r = minimize_scalar(nll, bounds=(np.log(0.05), np.log(3.0)), method="bounded")
+    return float(np.exp(r.x))
+
+
+def base_cet1_dynamics(verbose: bool = False) -> tuple[float, float]:
+    """(kappa, sigma) used in the base case."""
+    c = load_cet1_series()
+    k_hist, s_hist = fit_cet1_ou(c)
+    sigma = sigma_given_kappa(c, BASE_KAPPA)
+    if verbose:
+        print(f"CET1 history ({len(c)} quarters): MLE kappa={k_hist:.3f} sigma={s_hist:.3f} | "
+              f"base case kappa={BASE_KAPPA:.3f} sigma={sigma:.3f}")
+    return BASE_KAPPA, sigma
 
 
 FRED_FILE = DATA / "fred_treasury.csv"   # FRED export: observation_date, DGS5, DGS7, DGS10
@@ -89,7 +144,7 @@ def market_panel(freq: str = "W-FRI", curve: str = "fred") -> pd.DataFrame:
     the Treasury yield interpolated at its time to first call; the AT1 spread is
     the average of (bond yield - call-matched Treasury).
 
-    Sensitivities using only Capital IQ data: ``curve="ust10"`` uses one
+    Sensitivities using only Capital IQ data (no FRED): ``curve="ust10"`` uses one
     continuous ~10y series for everything; ``curve="matched"`` discounts the
     6.875% on its own CIQ benchmark (a 7y note since Jan-2026).
     """
@@ -110,6 +165,8 @@ def market_panel(freq: str = "W-FRI", curve: str = "fred") -> pd.DataFrame:
             disc = {i: curve_yield(row, years_to_call(i, day)) for i in ORDER}
             return disc, float(row["DGS5"])
     else:
+        # Capital IQ only: ~10y = benchmark of the 7.45% (continuous); shorter =
+        # benchmark of the 6.875% (a 2033 note), used as the 5y-CMT proxy
         ust10 = wide["benchmark_yield"]["US05602XQQ42"]
         ust_short = wide["benchmark_yield"]["US05602XQR25"].fillna(ust10)
         if curve == "ust10":
@@ -129,7 +186,8 @@ def market_panel(freq: str = "W-FRI", curve: str = "fred") -> pd.DataFrame:
             continue
         disc, ref = treasuries(day)
         quoted = [i for i in ORDER if not np.isnan(wide["mid_price"].at[day, i])]
-        # current AT1 spread: average of (bond yield - Treasury used to discount it)
+        # current AT1 spread: average over quoted bonds of yield minus the Treasury
+        # used to discount that bond
         refi = float(np.mean([wide["mid_yield"].at[day, i] - disc[i] for i in quoted]))
         for isin in quoted:
             rows.append(
@@ -159,9 +217,7 @@ def main():
     bonds = {i: DatedAT1.from_row(i, static.loc[i]) for i in ORDER}
 
     # 1. historical CET1 dynamics ------------------------------------------
-    c = load_cet1_series()
-    kappa, sigma = fit_cet1_ou(c)
-    print(f"CET1 OU fit ({len(c)} obs, theta=13): kappa={kappa:.3f}  sigma={sigma:.3f} pp/sqrt(y)")
+    kappa, sigma = base_cet1_dynamics(verbose=True)
 
     panel = market_panel(curve="fred")
     long_run = float(panel.groupby("date")["refi"].first().mean())
@@ -186,8 +242,9 @@ def main():
     print(piv.round(4).to_string())
     # the vol that makes the three bonds most consistent (U-shaped dispersion);
     # the base case uses the grid point closest to it
-    best_v = float(piv["dispersion_bp"].idxmin()) / 1e4
-    print("spread vol that best aligns the three bonds:", 1e4 * best_v, "bp")
+    best_v = BASE_SPREAD_VOL
+    print(f"base-case spread vol: {1e4 * best_v:.0f}bp (grid above = sensitivity; "
+          f"lowest gap on the grid at {piv['dispersion_bp'].idxmin():.0f}bp)")
 
     # sensitivity of the last-date cross-section to the curve and refi level
     sens = []

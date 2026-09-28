@@ -5,6 +5,10 @@ data/bnp_cet1_quarterly.csv
 data/bnp_capital_annual.csv
 data/bnp_share.csv
 results/calibration_*.csv
+results/*_log.txt
+results/cet1_bootstrap.csv
+results/parameter_sensitivity.csv
+results/kappa_scan.csv
 
 # Python and tools
 .venv/
