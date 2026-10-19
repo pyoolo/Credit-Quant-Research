@@ -1,0 +1,22 @@
+{
+  "as": {
+    "strategy": "as",
+    "mean_pnl": 423.839244942812,
+    "std_pnl": 40.55735106230291,
+    "sharpe_like": 10.450368030488807,
+    "mean_terminal_q": -0.0195,
+    "std_terminal_q": 4.540222433978317,
+    "mean_fills": 107.239,
+    "mean_capture": 423.84545352898573
+  },
+  "symmetric": {
+    "strategy": "symmetric",
+    "mean_pnl": 432.48546568992697,
+    "std_pnl": 46.99711715031859,
+    "sharpe_like": 9.20238286758374,
+    "mean_terminal_q": 0.00075,
+    "std_terminal_q": 9.893040454658012,
+    "mean_fills": 105.03025,
+    "mean_capture": 432.2353024259793
+  }
+}
