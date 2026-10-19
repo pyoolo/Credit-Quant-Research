@@ -1,0 +1,49 @@
+[
+  {
+    "name": "Issue A (BB fixed)",
+    "coupon_type": "FIXED",
+    "rating_bucket": "HY_BB",
+    "coupon": 5.50,
+    "duration": 4.2,
+    "px": 100,
+    "next_call_px": 102.75,
+    "yrs_to_call": 3.0,
+    "net_lev": 3.8,
+    "icr": 3.5,
+    "proposed_zs": 410
+  },
+  {
+    "name": "Issue B (B fixed)",
+    "coupon_type": "FIXED",
+    "rating_bucket": "HY_B",
+    "coupon": 7.25,
+    "duration": 3.5,
+    "px": 100,
+    "next_call_px": 103.6,
+    "yrs_to_call": 2.5,
+    "net_lev": 5.1,
+    "icr": 2.2,
+    "proposed_zs": 520
+  },
+  {
+    "name": "FRN D (floating)",
+    "coupon_type": "FLOATING",
+    "is_perp": false,
+    "rating_bucket": "HY_BB",
+    "coupon": 4.0,
+    "duration": 3.0,
+    "px": 100,
+    "proposed_zs": 380
+  },
+  {
+    "name": "Distress E (CCC)",
+    "coupon_type": "FIXED",
+    "rating_bucket": "HY_CCC",
+    "coupon": 6.0,
+    "duration": 2.5,
+    "px": 55,
+    "years": 3.0,
+    "expected_zs": 1500,
+    "rank_txt": "Sr Unsecured"
+  }
+]
