@@ -213,7 +213,10 @@ def main():
                                   p_call_first=prof.diagnostics["p_call_first"]))
     calls = pd.DataFrame(call_rows)
     calls.to_csv(RES / "call_probability.csv", index=False)
-    fig_calls(calls, bonds, long_run, mkts[ORDER[0]].refi_spread, subtitle)
+    # base-case call probabilities (today's spread, long-run at the sample mean):
+    # the numbers of the tables, shown as the dots of the figure
+    p_base = {i: cash_flow_profile(bonds[i], mkts[i], ms, randoms).diagnostics["p_call_first"] for i in ORDER}
+    fig_calls(calls, bonds, long_run, mkts[ORDER[0]].refi_spread, subtitle, p_base)
 
     print("\ncall vs extension (clean prices, same implied PONV):")
     ext_rows = []
@@ -317,11 +320,14 @@ def fig_decomposition(tab, subtitle):
     ax.set_xlim(0, max(mkt) * 1.22)
     ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=3, fontsize=9)
     fig.tight_layout()
-    fig.savefig(RES / "spread_decomposition.png", dpi=150)
+    fig.savefig(RES / "spread_decomposition.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
-def fig_calls(calls, bonds, sample_avg, today, subtitle):
+def fig_calls(calls, bonds, sample_avg, today, subtitle, p_base):
+    """Curves: today's and the long-run spread both set to the x value.  Dots and
+    labels: the base case (today's spread, long-run at the sample mean), i.e. the
+    probabilities reported in the tables."""
     fig, ax = plt.subplots(figsize=(8, 4.2))
     marks = []
     for i in ORDER:
@@ -329,7 +335,7 @@ def fig_calls(calls, bonds, sample_avg, today, subtitle):
         ax.plot(g["new_issue_spread_bp"], 100 * g["p_call_first"], color=COLOR[i], lw=2,
                 label=f"{SHORT[i]} (margin {1e4*bonds[i].reset_margin:.0f}bp)")
         ax.axvline(1e4 * bonds[i].reset_margin, color=COLOR[i], lw=0.8, ls=":")
-        p_today = 100 * np.interp(1e4 * today, g["new_issue_spread_bp"], g["p_call_first"])
+        p_today = 100 * p_base[i]
         ax.plot(1e4 * today, p_today, "o", color=COLOR[i], ms=7, zorder=3)
         marks.append((p_today, i))
     # labels to the left of today's line, pushed apart so they never overlap
@@ -355,7 +361,7 @@ def fig_calls(calls, bonds, sample_avg, today, subtitle):
     ax.text(0, 1.015, subtitle, transform=ax.transAxes, fontsize=8.5, color=INK2)
     ax.legend(loc="upper right", fontsize=9)
     fig.tight_layout()
-    fig.savefig(RES / "call_probability.png", dpi=150)
+    fig.savefig(RES / "call_probability.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 
@@ -398,7 +404,7 @@ def fig_cet1_profile(pc, ms, mkts, eba_shock, subtitle):
     ax.text(0, 1.015, subtitle, transform=ax.transAxes, fontsize=8.5, color=INK2)
     ax.legend(loc="upper left", fontsize=9)
     fig.tight_layout()
-    fig.savefig(RES / "price_vs_cet1.png", dpi=150)
+    fig.savefig(RES / "price_vs_cet1.png", dpi=150, bbox_inches="tight")
     plt.close(fig)
 
 

@@ -300,19 +300,24 @@ def main():
     ax.set_xlabel("kappa")
     ax.set_ylabel("gap between the 3 implied PONV (bp)")
     ax.set_title("What bond prices say about kappa", loc="left", fontweight="bold")
-    ax.legend(frameon=False, fontsize=8, loc="upper right")
     ax2 = ax.twinx()
-    ax2.plot(scan["kappa"], scan["lam_spec_pct"], "s--", color="#eb6834", lw=1.4, ms=4)
+    ax2.plot(scan["kappa"], scan["lam_spec_pct"], "s--", color="#eb6834", lw=1.4, ms=4,
+             label="AT1-specific hazard λ_spec (right axis)")
     ax2.axhline(0, color="#eb6834", lw=0.8, ls=":")
-    ax2.set_ylabel("AT1-specific hazard λ_spec (%/yr)", color="#eb6834")
+    ax2.set_ylabel("λ_spec (%/yr)", color="#eb6834")
     ax2.tick_params(axis="y", colors="#eb6834")
     ax2.spines["top"].set_visible(False)
     ax2.grid(False)
+    # one legend for both axes, below the panel so it covers no data
+    h1, l1 = ax.get_legend_handles_labels()
+    h2, l2 = ax2.get_legend_handles_labels()
+    ax.legend(h1 + h2, l1 + l2, frameon=False, fontsize=8, loc="upper center",
+              bbox_to_anchor=(0.5, -0.16), ncol=2)
     for a in axes:
         a.spines[["top", "right"]].set_visible(False)
         a.grid(color="#e4e3df", lw=0.6)
     fig.tight_layout()
-    fig.savefig(RES / "parameter_uncertainty.png", dpi=150)
+    fig.savefig(RES / "parameter_uncertainty.png", dpi=150, bbox_inches="tight")
     print("\nsaved results/parameter_uncertainty.png")
 
     # 4. capital cliff under each kappa scenario --------------------------------
