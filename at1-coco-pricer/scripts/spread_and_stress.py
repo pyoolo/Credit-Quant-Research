@@ -9,10 +9,11 @@ noise.
    intermediate price is turned into a yield-to-first-call spread over the
    Treasury used for discounting.  The steps add up exactly to the market spread:
        risk-free bullet to call  (0bp)
-     + extension (issuer's call option)
+     + resolution risk priced in BNP's Tier 2 (anchor T2, recovery 20%)
+     + AT1-specific premium (rest of the implied hazard)
      + MDA coupon cuts
      + mechanical conversion at the trigger
-     + PONV / tail / liquidity premium (the implied hazard)  = market spread
+     + extension (issuer's call option)  = market spread
    The order matters a little (interactions); it follows the order above.
 
 2. Call vs extension: P(call at first reset) as a function of the new-issue
@@ -37,15 +38,17 @@ from scipy.optimize import brentq
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from calibrate_bnp import (  # noqa: E402
-    BASE_SPREAD_VOL, COLOR, DATA, ORDER, RES, SHORT, base_cet1_dynamics, market_panel, settings,
+    ANCHOR, BASE_SPREAD_VOL, COLOR, ORDER, RES, SENIOR_SHORT, SHORT, base_cet1_dynamics, market_panel,
+    resolution_hazards, senior_bonds, senior_panel, settings,
 )
 
+from at1_coco import data as D  # noqa: E402
 from at1_coco.market import (  # noqa: E402
     DatedAT1, MarketState, cash_flow_profile, cont_rate, default_randoms, implied_ponv,
 )
 
 SURFACE, INK, INK2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e4e3df"
-COMP_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]   # palette slots 1-4
+COMP_COLORS = ["#1f4e8c", "#7fb0e6", "#eb6834", "#1baf7a", "#eda100"]   # resolution, AT1 premium, MDA, conversion, extension
 plt.rcParams.update({
     "figure.facecolor": SURFACE, "axes.facecolor": SURFACE, "savefig.facecolor": SURFACE,
     "axes.edgecolor": GRID, "axes.labelcolor": INK2, "xtick.color": INK2, "ytick.color": INK2,
@@ -76,7 +79,7 @@ def price(prof, mkt, lam):
 
 
 def main():
-    static = pd.read_csv(DATA / "bonds_static.csv", index_col="isin_144a")
+    static = D.bonds_static()
     bonds = {i: DatedAT1.from_row(i, static.loc[i]) for i in ORDER}
     kappa, sigma = base_cet1_dynamics(verbose=True)
     panel = market_panel(curve="fred")
@@ -93,12 +96,21 @@ def main():
     val_date = last["date"].iloc[0]
     print("valuation date", val_date.date(), "| implied PONV", {SHORT[i]: round(100 * lam[i], 2) for i in ORDER})
 
+    # resolution hazard priced in BNP's Tier 2 (anchor bond, Markit recovery 20%)
+    sp = senior_panel(panel)
+    sp_last = sp[sp["date"] == val_date]
+    lam_res_all = resolution_hazards(sp_last, senior_bonds(), ms, randoms)
+    lam_res = lam_res_all[ANCHOR]
+    print("resolution hazard from T2/SNP:", {SENIOR_SHORT[i]: round(100 * v, 2) for i, v in lam_res_all.items()},
+          f"| anchor {100 * lam_res:.2f}%")
+
     # 1. spread decomposition -------------------------------------------------
     # order: premium first (so every later feature is valued with risky
     # discounting), extension last (valued with all other features in place)
     stages = [
         ("risk-free to call", dict(call_rule="first", mda=False, conversion=False), False),
-        ("PONV / tail / liquidity", dict(call_rule="first", mda=False, conversion=False), True),
+        ("resolution risk (priced in T2)", dict(call_rule="first", mda=False, conversion=False), "res"),
+        ("AT1-specific premium", dict(call_rule="first", mda=False, conversion=False), True),
         ("MDA coupon cuts", dict(call_rule="first", mda=True, conversion=False), True),
         ("conversion", dict(call_rule="first", mda=True, conversion=True), True),
         ("extension", dict(call_rule="model", mda=True, conversion=True), True),
@@ -110,7 +122,8 @@ def main():
         prev = 0.0
         for name, kw, with_lam in stages:
             prof = cash_flow_profile(b, m, ms, randoms, **kw)
-            d = price(prof, m, lam[i] if with_lam else 0.0)
+            lam_k = min(lam_res, lam[i]) if with_lam == "res" else (lam[i] if with_lam else 0.0)
+            d = price(prof, m, lam_k)
             y = ytc(b, val_date, d)
             if base_y is None:
                 base_y = y
@@ -133,7 +146,8 @@ def main():
     print(tab.round(1).to_string())
     subtitle = (f"{val_date:%d %b %Y} · base case κ={kappa:.2f}, σ={sigma:.2f}, "
                 f"spread vol {1e4*ms.spread.vol:.0f}bp · implied PONV "
-                + " / ".join(f"{100*lam[i]:.2f}%" for i in ORDER))
+                + " / ".join(f"{100*lam[i]:.2f}%" for i in ORDER)
+                + f" (of which T2-priced {100*lam_res:.2f}%)")
     fig_decomposition(tab, subtitle)
 
     # 2. call vs extension ------------------------------------------------------
@@ -198,7 +212,8 @@ def main():
         "EBA adverse + spreads +200bp": lambda i: reprice(
             i, replace(mkts[i], cet1=mkts[i].cet1 - 4.2, refi_spread=mkts[i].refi_spread + 0.02),
             spreads_up(ms, 0.02), lam[i] * (mkts[i].refi_spread + 0.02) / mkts[i].refi_spread),
-        "PONV scare (hazard x3)": lambda i: reprice(i, lam_=3 * lam[i]),
+        "Bank credit shock: T2-priced hazard x2": lambda i: reprice(i, lam_=lam[i] + lam_res),
+        "AT1-specific shock: AT1 premium x2": lambda i: reprice(i, lam_=2 * lam[i] - lam_res),
         "March-2023 style: spreads +200bp, rates -50bp": lambda i: reprice(
             i, replace(mkts[i], discount_yield=mkts[i].discount_yield - 0.005,
                        reset_reference=mkts[i].reset_reference - 0.005,
@@ -227,8 +242,8 @@ def main():
 
 # ---------------------------------------------------------------------------
 def fig_decomposition(tab, subtitle):
-    comps = ["PONV / tail / liquidity", "MDA coupon cuts", "conversion", "extension"]
-    fig, ax = plt.subplots(figsize=(8.5, 3.6))
+    comps = ["resolution risk (priced in T2)", "AT1-specific premium", "MDA coupon cuts", "conversion", "extension"]
+    fig, ax = plt.subplots(figsize=(8.5, 3.9))
     y = np.arange(len(ORDER))[::-1]
     left = np.zeros(len(ORDER))
     for comp, col in zip(comps, COMP_COLORS):
@@ -249,7 +264,7 @@ def fig_decomposition(tab, subtitle):
     ax.text(0, 1.015, subtitle, transform=ax.transAxes, fontsize=8.5, color=INK2)
     ax.grid(axis="y", visible=False)
     ax.set_xlim(0, max(mkt) * 1.22)
-    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=4, fontsize=9)
+    ax.legend(loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=3, fontsize=9)
     fig.tight_layout()
     fig.savefig(RES / "spread_decomposition.png", dpi=150)
     plt.close(fig)
@@ -306,11 +321,12 @@ def fig_cet1_profile(pc, ms, mkts, eba_shock, subtitle):
     # capital delta today and around the threshold, read off the curves (average of the bonds)
     avg = pc.groupby("cet1")["clean"].mean()
     d_today = (np.interp(today + 0.5, avg.index, avg.values) - np.interp(today - 0.5, avg.index, avg.values))
-    d_mda = (np.interp(top, avg.index, avg.values) - np.interp(top - 1, avg.index, avg.values))
+    # same definitions as parameter_uncertainty.py: +-0.5pp today, +-0.25pp around the threshold
+    d_mda = (np.interp(top + 0.25, avg.index, avg.values) - np.interp(top - 0.25, avg.index, avg.values)) / 0.5
     ax.axvline(top, color=INK2, ls="--", lw=1.2)
     ax.axvline(today, color=INK2, lw=1)
     y0 = ax.get_ylim()[0]
-    ax.annotate(f"below MDA ({top:.2f}%):\n≈{d_mda:.1f}pt per pp", (top, y0), xytext=(-8, 10),
+    ax.annotate(f"at the MDA threshold ({top:.2f}%):\n≈{d_mda:.1f}pt per pp", (top, y0), xytext=(-8, 10),
                 textcoords="offset points", ha="right", color=INK2, fontsize=8.5)
     ax.annotate(f"today {today:.2f}%:\n≈{d_today:.2f}pt per pp", (today, y0), xytext=(6, 10),
                 textcoords="offset points", color=INK2, fontsize=8.5)

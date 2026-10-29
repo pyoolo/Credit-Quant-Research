@@ -31,13 +31,14 @@ import pandas as pd
 from scipy.optimize import minimize, minimize_scalar
 
 from at1_coco import CET1Params
+from at1_coco import data as D
 from at1_coco.market import (
-    DatedAT1, MarketState, ModelSettings, SpreadParams, cash_flow_profile,
-    default_randoms, implied_ponv,
+    DatedAT1, DatedBullet, MarketState, ModelSettings, SpreadParams, cash_flow_profile,
+    default_randoms, hazard_state, implied_ponv, implied_resolution_hazard,
 )
 
-ROOT = Path(__file__).resolve().parents[1]
-DATA, RES = ROOT / "data", ROOT / "results"
+ROOT = D.ROOT
+DATA, RES = D.DATA, D.RES
 ORDER = ["US05602XQR25", "US05602XQS08", "US05602XQQ42"]
 SHORT = {"US05602XQR25": "6.875% NC33", "US05602XQS08": "7.20% NC36", "US05602XQQ42": "7.45% NC35"}
 COLOR = {"US05602XQR25": "#2a78d6", "US05602XQS08": "#eb6834", "US05602XQQ42": "#1baf7a"}
@@ -55,7 +56,7 @@ ONE_OFF_QUARTERS = ["2023-03-31"]  # sale of Bank of the West (+1.2pp)
 
 def load_cet1_series() -> pd.Series:
     """Quarterly CET1 ratio since Basel III (2014Q1-2026Q2, ~50 observations)."""
-    q = pd.read_csv(DATA / "bnp_cet1_quarterly.csv", parse_dates=["date"], index_col="date")["cet1_ratio"]
+    q = D.cet1_quarterly()["cet1_ratio"]          # prints published by the valuation date
     return q.dropna()[q.dropna().index >= BASEL3_START]
 
 
@@ -121,14 +122,9 @@ def base_cet1_dynamics(verbose: bool = False) -> tuple[float, float]:
     return BASE_KAPPA, sigma
 
 
-FRED_FILE = DATA / "fred_treasury.csv"   # FRED export: observation_date, DGS5, DGS7, DGS10
-
-
 def load_fred_curve() -> pd.DataFrame:
     """Daily constant-maturity Treasury yields (%) from FRED, tenors 5/7/10y."""
-    f = pd.read_csv(FRED_FILE, parse_dates=["observation_date"], index_col="observation_date")
-    f = f.apply(pd.to_numeric, errors="coerce")[["DGS5", "DGS7", "DGS10"]]
-    return f.dropna(how="all").ffill()
+    return D.fred_curve()
 
 
 def curve_yield(curve_row: pd.Series, tenor: float) -> float:
@@ -148,11 +144,12 @@ def market_panel(freq: str = "W-FRI", curve: str = "fred") -> pd.DataFrame:
     continuous ~10y series for everything; ``curve="matched"`` discounts the
     6.875% on its own CIQ benchmark (a 7y note since Jan-2026).
     """
-    p = pd.read_csv(DATA / "bond_prices.csv", parse_dates=["date"])
+    p = D.bond_prices()
     wide = {c: p.pivot(index="date", columns="isin", values=c) for c in ["mid_price", "mid_yield", "benchmark_yield"]}
-    static = pd.read_csv(DATA / "bonds_static.csv", index_col="isin_144a", parse_dates=["first_call_date"])
-    cet1 = pd.read_csv(DATA / "bnp_cet1_quarterly.csv", parse_dates=["date"], index_col="date")["cet1_ratio"]
-    share = pd.read_csv(DATA / "bnp_share.csv", parse_dates=["date"], index_col="date")["close_eur"]
+    static = D.bonds_static()
+    static["first_call_date"] = pd.to_datetime(static["first_call_date"])
+    cet1 = D.cet1_quarterly()["cet1_ratio"].dropna()
+    share = D.share_eur()
 
     def years_to_call(isin, day):
         return (static.at[isin, "first_call_date"] - day).days / 365.25
@@ -198,10 +195,78 @@ def market_panel(freq: str = "W-FRI", curve: str = "fred") -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def settings(kappa: float, sigma: float, spread_vol: float, long_run: float) -> ModelSettings:
+# MDA geometry.  Floor = P1 + P2R (CET1 part) from the 30-Sep-2025 stack; the
+# combined buffer is set so that floor + buffer equals the latest published CET1
+# requirement (10.43% at 30-Jun-2026).  The O-SII buffer then steps up by 25bp on
+# 1-Jan-2027 and 1-Jan-2028 (the higher of G-SIB and O-SII applies).
+MDA_FLOOR = 5.64
+OSII_STEPS = (("2027-01-01", 0.25), ("2028-01-01", 0.25))
+
+
+def mda_requirement_today() -> float:
+    return float(D.requirement_series().iloc[-1])
+
+
+def settings(kappa: float, sigma: float, spread_vol: float, long_run: float,
+             buffer_steps: tuple = OSII_STEPS) -> ModelSettings:
     cet1 = CET1Params(c0=13.0, kappa=kappa, theta=13.0, sigma=sigma, jump_intensity=0.12,
                       jump_median=2.2, jump_vol=0.5, ponv_intensity=0.0)
-    return ModelSettings(cet1=cet1, spread=SpreadParams(kappa=0.5, long_run=long_run, vol=spread_vol))
+    return ModelSettings(cet1=cet1, spread=SpreadParams(kappa=0.5, long_run=long_run, vol=spread_vol),
+                         mda_threshold=MDA_FLOOR, combined_buffer=mda_requirement_today() - MDA_FLOOR,
+                         buffer_steps=buffer_steps)
+
+
+# ---------------------------------------------------------------------------
+# capital-structure anchor: BNP's Tier 2 and senior non-preferred bonds
+# ---------------------------------------------------------------------------
+# T2 5.906% 2035NC34 is the anchor: its call (Nov-2034) sits inside the AT1 call
+# window (2033-2036).  The 2.588% T2 (call 2030) and the SNP (call 2034) are checks.
+SENIOR_ORDER = ["US09659T2D24", "US09659T2B67", "US09659W2X16"]
+SENIOR_SHORT = {"US09659T2D24": "T2 5.906% 2035NC34", "US09659T2B67": "T2 2.588% 2035NC30",
+                "US09659W2X16": "SNP 5.738% 2035NC34"}
+ANCHOR = "US09659T2D24"
+# recovery at resolution: Markit conventions, subordinated 20% and senior 40%
+RECOVERY = {"T2": 0.20, "SNP": 0.40}
+
+
+def senior_bonds() -> dict:
+    st = D.senior_t2_static()
+    return {i: DatedBullet.from_row(i, st.loc[i]) for i in SENIOR_ORDER}
+
+
+def senior_panel(panel: pd.DataFrame) -> pd.DataFrame:
+    """T2/SNP rows on the AT1 panel dates, with the same state inputs (AT1 spread, CET1)."""
+    m = D.market_daily()
+    m = m[m["isin"].isin(SENIOR_ORDER)]
+    st = D.senior_t2_static()
+    fred = load_fred_curve()
+    state = panel.groupby("date")[["refi", "cet1", "reset_ref", "share_usd"]].first()
+    rows = []
+    for day, s_ in state.iterrows():
+        q = m[m["date"] == day]
+        row = fred[fred.index <= day].iloc[-1]
+        for r in q.itertuples():
+            ttc = (pd.Timestamp(st.at[r.isin, "first_call_date"]) - day).days / 365.25
+            rows.append(dict(date=day, isin=r.isin, rank=r.rank, clean=r.mid_price,
+                             disc_yield=curve_yield(row, ttc) / 100, years_to_call=ttc,
+                             refi=s_.refi, cet1=s_.cet1, reset_ref=s_.reset_ref, share_usd=s_.share_usd,
+                             bid_ask=r.bid_ask_pts))
+    return pd.DataFrame(rows)
+
+
+def resolution_hazards(day_rows: pd.DataFrame, bonds: dict, ms, randoms, recovery: dict | None = None,
+                       state=None) -> dict:
+    """Implied resolution hazard of each T2/SNP bond on one date (shared hazard state)."""
+    recovery = recovery or RECOVERY
+    r0 = day_rows.iloc[0]
+    mkt = MarketState(r0.date, np.nan, np.nan, r0.reset_ref, r0.refi, r0.cet1, r0.share_usd)
+    state = state or hazard_state(mkt, ms, randoms)
+    out = {}
+    for r in day_rows.itertuples():
+        b = bonds[r.isin]
+        out[r.isin], _ = implied_resolution_hazard(b, r.clean, r.disc_yield, state, r.date, ms.dt,
+                                                   recovery[b.rank])
+    return out
 
 
 def implied_for_row(row, bonds, ms, randoms):
@@ -213,7 +278,7 @@ def implied_for_row(row, bonds, ms, randoms):
 
 def main():
     RES.mkdir(exist_ok=True)
-    static = pd.read_csv(DATA / "bonds_static.csv", index_col="isin_144a")
+    static = D.bonds_static()
     bonds = {i: DatedAT1.from_row(i, static.loc[i]) for i in ORDER}
 
     # 1. historical CET1 dynamics ------------------------------------------

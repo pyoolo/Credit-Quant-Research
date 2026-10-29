@@ -31,6 +31,7 @@ root finder on one set of paths.
 
 from __future__ import annotations
 
+import gc
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -133,7 +134,10 @@ class ModelSettings:
     cet1: CET1Params
     spread: SpreadParams
     mda_threshold: float = 5.64      # P1 + P2R (CET1 part)
-    combined_buffer: float = 4.87    # CBR
+    combined_buffer: float = 4.87    # CBR today
+    # scheduled changes of the combined buffer: ((effective date, change in pp), ...),
+    # e.g. the O-SII step-ups. The MDA threshold is mda_threshold + buffer(t).
+    buffer_steps: tuple = ()
     share_stress: float = 0.20       # share price at trigger as fraction of today's
     ponv_recovery: float = 0.0
     hazard_linked: bool = True       # PONV hazard proportional to the simulated AT1 spread
@@ -179,6 +183,15 @@ class CashFlowProfile:
         return float(pv.mean())
 
 
+def buffer_path(ms: ModelSettings, val_date: pd.Timestamp, times: np.ndarray) -> np.ndarray:
+    """Combined buffer (pp) at each time (years from ``val_date``), with scheduled steps."""
+    w = np.full(np.shape(times), ms.combined_buffer, dtype=float)
+    for eff, delta in ms.buffer_steps:
+        t_eff = (pd.Timestamp(eff) - val_date).days / 365.25
+        w = w + np.where(np.asarray(times) >= t_eff, delta, 0.0)
+    return w
+
+
 def spread_paths(randoms: Randoms, sp: SpreadParams, s0: float, dt: float, n_steps: int) -> np.ndarray:
     """OU spread driven by a mix of the CET1 normals and an independent block."""
     if sp.vol == 0:
@@ -198,6 +211,49 @@ def spread_paths(randoms: Randoms, sp: SpreadParams, s0: float, dt: float, n_ste
     return s
 
 
+@dataclass
+class HazardState:
+    """Simulated state shared by every instrument of the issuer on one date.
+
+    CET1 and spread paths, the MDA threshold over time and the integrated hazard
+    driver ``I_t = int_0^t s_u / s_0 du``.  The same random numbers give the same
+    state for the AT1s and for the T2 / senior bonds, so their hazards are
+    directly comparable.
+    """
+
+    n_steps: int
+    C: np.ndarray
+    trigger_idx: np.ndarray
+    w_grid: np.ndarray
+    top: np.ndarray
+    S_eff: np.ndarray
+    driver: np.ndarray
+    I: np.ndarray
+
+
+def hazard_state(mkt: MarketState, ms: ModelSettings, randoms: Randoms,
+                 trigger_level: float = 5.125) -> HazardState:
+    dt, H = ms.dt, ms.horizon
+    n_steps = int(round(H / dt))
+    cet1 = replace(ms.cet1, c0=mkt.cet1, ponv_intensity=0.0)   # PONV handled analytically
+    sim = simulate_cet1(cet1, trigger_level, H, dt, randoms)
+    C = sim.paths
+    # --- issuer spread: market OU part + capital add-on --------------------
+    w_grid = buffer_path(ms, mkt.val_date, np.arange(n_steps + 1) * dt)   # combined buffer over time
+    top = ms.mda_threshold + w_grid                                       # MDA threshold over time
+    S = spread_paths(randoms, ms.spread, mkt.refi_spread, dt, n_steps)
+    S_eff = S + ms.spread.capital_beta * np.maximum(0.0, top[None, :] - C)
+    if ms.hazard_linked:
+        # normalised by today's *market* AT1 spread (no capital add-on), so a CET1
+        # shock inside the buffer raises the hazard already at t=0
+        driver = np.maximum(S_eff, 0.0) / mkt.refi_spread
+    else:
+        driver = np.ones_like(S_eff)
+    I = np.zeros_like(driver)
+    I[:, 1:] = np.cumsum(driver[:, :-1] * dt, axis=1)          # int_0^t driver du
+    return HazardState(n_steps, C, sim.trigger_idx, w_grid, top, S_eff, driver, I)
+
+
 def cash_flow_profile(bond: DatedAT1, mkt: MarketState, ms: ModelSettings,
                       randoms: Randoms, *, call_rule: str = "model", mda: bool = True,
                       conversion: bool = True) -> CashFlowProfile:
@@ -214,31 +270,17 @@ def cash_flow_profile(bond: DatedAT1, mkt: MarketState, ms: ModelSettings,
     if call_rule not in {"model", "first", "never"}:
         raise ValueError("call_rule must be 'model', 'first' or 'never'")
     dt, H = ms.dt, ms.horizon
-    n_steps = int(round(H / dt))
-    cet1 = replace(ms.cet1, c0=mkt.cet1, ponv_intensity=0.0)   # PONV handled analytically
-    sim = simulate_cet1(cet1, bond.trigger_level, H, dt, randoms)
-    C = sim.paths
+    st = hazard_state(mkt, ms, randoms, bond.trigger_level)
+    n_steps, C, top, w_grid, S_eff, driver, I = (st.n_steps, st.C, st.top, st.w_grid, st.S_eff,
+                                                 st.driver, st.I)
     n_paths = C.shape[0]
     big = np.iinfo(np.int64).max
-    trig = np.where(sim.trigger_idx < 0, big, sim.trigger_idx)
+    trig = np.where(st.trigger_idx < 0, big, st.trigger_idx)
     if not conversion:
         trig = np.full(n_paths, big, dtype=np.int64)
 
     t_cpn, is_reset, after_reset = bond.schedule(mkt.val_date, H)
     cidx = np.minimum(np.round(t_cpn / dt).astype(np.int64), n_steps)
-
-    # --- issuer spread: market OU part + capital add-on --------------------
-    top = ms.mda_threshold + ms.combined_buffer
-    S = spread_paths(randoms, ms.spread, mkt.refi_spread, dt, n_steps)
-    S_eff = S + ms.spread.capital_beta * np.maximum(0.0, top - C)
-    if ms.hazard_linked:
-        # normalised by today's *market* spread (no capital add-on), so a CET1
-        # shock inside the buffer raises the hazard already at t=0
-        driver = np.maximum(S_eff, 0.0) / mkt.refi_spread
-    else:
-        driver = np.ones_like(S_eff)
-    I = np.zeros_like(driver)
-    I[:, 1:] = np.cumsum(driver[:, :-1] * dt, axis=1)          # int_0^t driver du
 
     # --- call decision on reset dates -------------------------------------
     call_col = np.where(is_reset)[0]
@@ -249,7 +291,7 @@ def cash_flow_profile(bond: DatedAT1, mkt: MarketState, ms: ModelSettings,
         ci = cidx[call_col]
         # issuer calls when the reset margin costs more than a new AT1, needs
         # the note alive, and (regulatory approval) CET1 above the MDA threshold
-        ok = (bond.reset_margin > S_eff[:, ci]) & (ci[None, :] < trig[:, None]) & (C[:, ci] >= top)
+        ok = (bond.reset_margin > S_eff[:, ci]) & (ci[None, :] < trig[:, None]) & (C[:, ci] >= top[ci][None, :])
         has = ok.any(axis=1)
         first = np.argmax(ok, axis=1)
         call_at[has] = call_col[first[has]]
@@ -259,7 +301,8 @@ def cash_flow_profile(bond: DatedAT1, mkt: MarketState, ms: ModelSettings,
     cpn_amt = rate / bond.coupon_freq * bond.notional
     k = np.arange(t_cpn.size)
     live = (cidx[None, :] < trig[:, None]) & (k[None, :] <= call_at[:, None])
-    frac = mda_fraction(C[:, cidx], ms.mda_threshold, ms.combined_buffer) if mda else np.ones((n_paths, t_cpn.size))
+    frac = (mda_fraction(C[:, cidx], ms.mda_threshold, w_grid[cidx][None, :]) if mda
+            else np.ones((n_paths, t_cpn.size)))
     cpn = live * frac * cpn_amt[None, :]
 
     # --- redemption, conversion, survival ---------------------------------
@@ -305,9 +348,118 @@ def implied_ponv(bond: DatedAT1, mkt: MarketState, ms: ModelSettings, randoms: R
 
     if f(0.0) < 0:          # model already too cheap without PONV risk
         return float("nan"), prof
-    return brentq(f, 0.0, 1.0, xtol=1e-7), prof
+    lam = brentq(f, 0.0, 1.0, xtol=1e-7)
+    del f
+    gc.collect()            # brentq leaves a reference cycle holding the closure (and its arrays)
+    return lam, prof
 
 
 def default_randoms(n_paths: int = 20_000, horizon: float = 40.0, dt: float = 1 / 12,
                     seed: int = 7) -> Randoms:
     return draw_randoms(n_paths, int(round(horizon / dt)), seed=seed)
+
+
+# ---------------------------------------------------------------------------
+# Tier 2 and senior non-preferred bonds: anchoring the hazard to bank credit
+# ---------------------------------------------------------------------------
+@dataclass(frozen=True)
+class DatedBullet:
+    """A fixed-coupon T2 or senior bond priced to its call date.
+
+    BNP's T2 and senior non-preferred notes are callable once, one year before
+    maturity (or at a reset date), when they stop counting as regulatory capital
+    or MREL.  The market prices that call as certain, so the bond is a bullet to
+    ``call_date``.  Its only risk is the issuer's resolution: at a resolution
+    event the holder receives ``recovery`` x face.
+    """
+
+    isin: str
+    coupon: float
+    call_date: pd.Timestamp
+    rank: str = "T2"
+    coupon_freq: int = 2
+    notional: float = 100.0
+
+    @classmethod
+    def from_row(cls, isin: str, row: pd.Series) -> "DatedBullet":
+        return cls(isin=isin, coupon=float(row["coupon_initial"]), call_date=pd.Timestamp(row["first_call_date"]),
+                   rank=str(row["rank"]), coupon_freq=int(row["coupon_freq"]))
+
+    def coupon_dates(self, until: pd.Timestamp) -> pd.DatetimeIndex:
+        months = 12 // self.coupon_freq
+        start = self.call_date - pd.DateOffset(months=months * 200)
+        return pd.DatetimeIndex(pd.date_range(start, until, freq=pd.DateOffset(months=months)))
+
+    def accrued(self, val_date: pd.Timestamp) -> float:
+        dates = self.coupon_dates(val_date + pd.DateOffset(years=1))
+        d1, d2 = dates[dates <= val_date][-1], val_date
+        days = 360 * (d2.year - d1.year) + 30 * (d2.month - d1.month) + (min(d2.day, 30) - min(d1.day, 30))
+        return self.coupon * self.notional * days / 360.0
+
+    def schedule(self, val_date: pd.Timestamp) -> np.ndarray:
+        """Year fractions (ACT/365.25) of the coupons up to and including the call date."""
+        dates = self.coupon_dates(self.call_date)
+        fut = dates[dates > val_date]
+        return np.asarray((fut - val_date).days / 365.25)
+
+
+@dataclass
+class BulletProfile:
+    """Coupons, redemption and the path-wise hazard driver of a bullet bond.
+
+    With hazard ``lam * driver_t`` and recovery R paid at the resolution time::
+
+        PV = E[ sum_i c_i e^{-r t_i - lam I(t_i)} + F e^{-r T - lam I(T)}
+                + R F sum_n (e^{-lam I(t_n)} - e^{-lam I(t_{n+1})}) e^{-r t_{n+1}} ]
+
+    The last sum is the probability of resolution in each grid step, given the
+    path, times the discounted recovery: exact on the grid, analytic in lam.
+    """
+
+    t_cpn: np.ndarray
+    cpn: float
+    i_cpn: np.ndarray        # (paths, n_cpn)
+    t_end: float
+    i_end: np.ndarray        # (paths,)
+    t_grid: np.ndarray       # (n_end + 1,)
+    i_grid: np.ndarray       # (paths, n_end + 1)
+    notional: float = 100.0
+
+    def dirty_price(self, r_cont: float, lam: float, recovery: float) -> float:
+        pv = (self.cpn * np.exp(-r_cont * self.t_cpn[None, :] - lam * self.i_cpn)).sum(axis=1)
+        pv += self.notional * np.exp(-r_cont * self.t_end - lam * self.i_end)
+        if recovery:
+            surv = np.exp(-lam * self.i_grid)
+            dq = surv[:, :-1] - surv[:, 1:]
+            pv += recovery * self.notional * (dq * np.exp(-r_cont * self.t_grid[None, 1:])).sum(axis=1)
+        return float(pv.mean())
+
+
+def bullet_profile(bond: DatedBullet, state: HazardState, val_date: pd.Timestamp, dt: float) -> BulletProfile:
+    t_cpn = bond.schedule(val_date)
+    cidx = np.minimum(np.round(t_cpn / dt).astype(np.int64), state.n_steps)
+    t_end = float(t_cpn[-1])
+    n_end = int(cidx[-1])
+    return BulletProfile(t_cpn=t_cpn, cpn=bond.coupon / bond.coupon_freq * bond.notional,
+                         i_cpn=state.I[:, cidx], t_end=t_end, i_end=state.I[:, n_end],
+                         t_grid=np.arange(n_end + 1) * dt, i_grid=state.I[:, : n_end + 1],
+                         notional=bond.notional)
+
+
+def implied_resolution_hazard(bond: DatedBullet, clean_price: float, discount_yield: float,
+                              state: HazardState, val_date: pd.Timestamp, dt: float,
+                              recovery: float) -> tuple[float, BulletProfile]:
+    """Resolution hazard (today's level, per year) that reprices a T2 / senior bond."""
+    prof = bullet_profile(bond, state, val_date, dt)
+    target = clean_price + bond.accrued(val_date)
+    r = cont_rate(discount_yield)
+
+    def f(lam):
+        return prof.dirty_price(r, lam, recovery) - target
+
+    if f(0.0) < 0:
+        return float("nan"), prof
+    lam = brentq(f, 0.0, 2.0, xtol=1e-8)
+    del f
+    gc.collect()
+    return lam, prof

@@ -20,32 +20,30 @@ step "Checking inputs"
 python - <<'PY'
 import sys
 from pathlib import Path
-import pandas as pd
-need = ["data/raw/ciq_capital_adequacy_quarterly.xlsx", "data/raw/ciq_basel_annual.xlsx",
-        "data/raw/ciq_bnp_share.xlsx", "data/bonds_static.csv", "data/fred_treasury.csv",
-        "data/bnp_srep_requirement.csv"]
+need = [f"data/raw/ciq_bond_{i}.xlsx" for i in
+        ["US05602XQR25", "US05602XQQ42", "US05602XQS08", "US09659T2D24", "US09659W2X16", "US09659T2B67"]]
+need += ["data/raw/ciq_cds_bnp_snrfor_eur.xlsx", "data/raw/ciq_capital_adequacy_quarterly.xlsx",
+         "data/raw/ciq_basel_annual.xlsx", "data/raw/ciq_bnp_share.xlsx",
+         "data/reference/bonds_static.csv", "data/reference/senior_t2_static.csv",
+         "data/reference/fred_treasury.csv", "data/reference/bnp_srep_requirement.csv"]
 missing = [f for f in need if not Path(f).exists()]
 if missing:
     sys.exit("missing input files: " + ", ".join(missing))
-d = pd.read_excel("data/raw/ciq_capital_adequacy_quarterly.xlsx", header=None)
-r = d.index[d[0] == "Fiscal Period Ended"][0]
-dates = pd.to_datetime(d.iloc[r, 1:]).dropna()
-print(f"CET1 export: {dates.min().date()} -> {dates.max().date()} ({len(dates)} quarters)")
-fred = pd.read_csv("data/fred_treasury.csv")
-print(f"FRED curve up to {fred.iloc[:, 0].iloc[-1]}")
+print("all inputs present")
 PY
 
-step "1/7 Dataset";            python scripts/build_dataset.py > results/build_log.txt
-step "2/7 Tests";              python -m pytest -q
-step "3/7 Market analysis";    python -u scripts/market_analysis.py | tee results/market_log.txt
+step "1/8 Dataset";            python scripts/build_bnp_dataset.py > results/build_log.txt
+step "2/8 Tests";              python -m pytest -q
+step "3/8 Market analysis";    python -u scripts/market_analysis.py | tee results/market_log.txt
 if [[ $QUICK -eq 0 ]]; then
-  step "4/7 Calibration (~10 min)"; python -u scripts/calibrate_bnp.py | tee results/calibrate_log.txt
+  step "4/8 Calibration (~10 min)"; python -u scripts/calibrate_bnp.py | tee results/calibrate_log.txt
 else
-  step "4/7 Calibration skipped (--quick)"
+  step "4/8 Calibration skipped (--quick)"
 fi
-step "5/7 Spread, call, stress (~5 min)"; python -u scripts/spread_and_stress.py | tee results/stress_log.txt
-step "6/7 Parameter uncertainty (~6 min)"; python -u scripts/parameter_uncertainty.py | tee results/uncertainty_log.txt
-step "7/7 Video (~2 min)";     python scripts/make_video.py
+step "5/8 Capital structure: T2/SNP anchor (~2 min)"; python -u scripts/capital_structure.py | tee results/capital_structure_log.txt
+step "6/8 Spread, call, stress (~5 min)"; python -u scripts/spread_and_stress.py | tee results/stress_log.txt
+step "7/8 Parameter uncertainty (~6 min)"; python -u scripts/parameter_uncertainty.py | tee results/uncertainty_log.txt
+step "8/8 Video (~2 min)";     python scripts/make_video.py
 
 if command -v latexmk >/dev/null 2>&1; then
   step "PDF note"

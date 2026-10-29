@@ -13,7 +13,7 @@ Figures in ``results/``:
 3. ``bnp_at1_yield_split.png`` yield change split into Treasury (FRED 10y) and
                                 spread: year to date, and the last 4 weeks
 
-Run after ``scripts/build_dataset.py``.
+Run after ``scripts/build_bnp_dataset.py``.
 """
 
 from __future__ import annotations
@@ -29,10 +29,11 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 from at1_coco import CET1Params  # noqa: E402
+from at1_coco import data as D  # noqa: E402
 from at1_coco.processes import draw_randoms, simulate_cet1  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA, RES = ROOT / "data", ROOT / "results"
+DATA, RES = D.DATA, D.RES
 ORDER = ["US05602XQR25", "US05602XQS08", "US05602XQQ42"]
 
 # reference palette (light mode), categorical slots in fixed order
@@ -59,11 +60,11 @@ EVENTS = [("2014-06-30", "US sanctions\nsettlement"), ("2023-03-31", "Bank of th
 # data
 # ---------------------------------------------------------------------------
 def load():
-    prices = pd.read_csv(DATA / "bond_prices.csv", parse_dates=["date"])
-    q = pd.read_csv(DATA / "bnp_cet1_quarterly.csv", parse_dates=["date"], index_col="date")
-    a = pd.read_csv(DATA / "bnp_capital_annual.csv", parse_dates=["date"], index_col="date")
-    share = pd.read_csv(DATA / "bnp_share.csv", parse_dates=["date"], index_col="date")
-    static = pd.read_csv(DATA / "bonds_static.csv", index_col="isin_144a")
+    prices = D.bond_prices()
+    q = D.cet1_quarterly()
+    a = q                       # year-end points are in the quarterly series
+    share = D.share_eur().rename("close_eur").to_frame()
+    static = D.bonds_static()
     def pct(x):
         t = f"{100 * x:.3f}".rstrip("0")
         return t + "0" if t.split(".")[1] == "" or len(t.split(".")[1]) < 2 else t
@@ -76,12 +77,8 @@ def load():
 
 
 def load_ust10(prices: pd.DataFrame) -> pd.Series:
-    """10y Treasury (%): FRED DGS10 if available, else the CIQ benchmark of the 7.45%."""
-    f = DATA / "fred_treasury.csv"
-    if f.exists():
-        s = pd.read_csv(f, parse_dates=["observation_date"], index_col="observation_date")["DGS10"]
-        return pd.to_numeric(s, errors="coerce").dropna()
-    return prices[prices["isin"] == "US05602XQQ42"].set_index("date")["benchmark_yield"]
+    """10y Treasury (%) from FRED DGS10."""
+    return D.fred_curve()["DGS10"].dropna()
 
 
 def cet1_history(q: pd.DataFrame, a: pd.DataFrame) -> pd.Series:
@@ -90,19 +87,13 @@ def cet1_history(q: pd.DataFrame, a: pd.DataFrame) -> pd.Series:
     Before 2014 the reported ratio follows Basel II/2.5 definitions and is not
     comparable, so it is left out."""
     qq = q["cet1_ratio"].dropna()
-    ann = a["cet1_ratio"][a.index < qq.index.min()]
-    c = pd.concat([ann, qq]).sort_index()
+    c = qq.sort_index()
     return c[c.index >= "2014-01-01"]
 
 
 def requirement_series(a: pd.DataFrame) -> pd.Series:
-    """CET1 requirement: annual CIQ stack plus the latest quarterly figures BNP publishes."""
-    req = a["cet1_requirement"].dropna()
-    f = DATA / "bnp_srep_requirement.csv"
-    if f.exists():
-        latest = pd.read_csv(f, parse_dates=["date"], index_col="date")["cet1_requirement"]
-        req = pd.concat([req[req.index < latest.index.min()], latest])
-    return req.sort_index()
+    """CET1 (MDA) requirement as a step series: annual CIQ stack, then BNP's quarterly figures."""
+    return D.requirement_series()
 
 
 # ---------------------------------------------------------------------------

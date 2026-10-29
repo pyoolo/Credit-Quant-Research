@@ -14,7 +14,7 @@
 \title{Pricing AT1 Contingent Convertibles as a Claim on Bank Capital\\[4pt]
 \large Model, numerical method, and a calibration to BNP Paribas's USD AT1s}
 \author{Paolo Mastrogiacomo \\ \texttt{Credit-Quant-Research / at1-coco-pricer}}
-\date{September 2026}
+\date{September 2026 \\ \small revised October 2026: Tier~2 anchor, MDA path, data layout}
 
 \begin{document}
 \maketitle
@@ -28,17 +28,20 @@ refinancing is cheaper. We take the Common Equity Tier~1 (CET1) ratio as the
 state variable, add a mean-reverting issuer spread that drives both the call
 decision and the regulatory write-down (PONV) hazard, and price by Monte Carlo
 with the PONV hazard integrated analytically along each path. Calibrated to
-BNP Paribas's three USD AT1s (September 2026), with the FRED Treasury curve
-and 50 quarters of CET1 history, one implied hazard of about $2.3\%$ a year
-prices all three bonds. About $240$bp of the $\approx 270$--$280$bp spread is
-compensation for PONV, tail and liquidity risk; mechanical conversion explains
-$\approx4$bp. The price is flat in capital above the MDA threshold
-($\approx0.45$ points per point of CET1) and steep around it ($\approx4$
-points). A bootstrap shows that the speed of capital mean reversion is the
-weakest input: the half-life of a capital shock is anywhere between 1.5 and 11
-years, and the capital stress results scale by a factor of six across that
-range. The bond cross-section is consistent only with the faster end, which
-sets the base case.
+BNP Paribas's three USD AT1s on 25 September 2026, with the FRED Treasury curve,
+50 quarters of CET1 history and an MDA threshold that rises with the scheduled
+O-SII step-ups, the three bonds imply a hazard of about $2.2\%$ a year, equal
+across bonds to within the bid--offer. Pricing BNP's Tier~2 and senior
+non-preferred bonds on the same simulated state splits that hazard: $1.7\%$ is
+resolution risk already priced in Tier~2 (recovery $20\%$), $0.5\%$ is specific
+to the AT1. Of the $\approx270$--$280$bp spread, about $180$bp is bank resolution
+risk, $50$bp an AT1-specific premium, $30$bp expected MDA coupon cuts, $4$bp
+mechanical conversion and $6$--$15$bp extension. The price is flat in capital above
+the MDA threshold ($\approx0.6$ points per point of CET1) and steep at it
+($\approx4$ points). The speed of capital mean reversion is the weakest input:
+the half-life of a capital shock is anywhere between 1.5 and 11 years, and the
+capital stress results scale by a factor of five across that range; bond prices
+lean towards the faster end but do not pin it down.
 \end{abstract}
 
 \tableofcontents
@@ -82,6 +85,16 @@ historical capital volatility would justify (\S\ref{sec:results}), and the
 call decision depends on market spreads, not only on capital. We therefore add
 a second state variable, the issuer's AT1 spread, which (i) drives the call
 decision and (ii) scales the PONV hazard.
+
+The PONV hazard then absorbs everything the mechanical features leave
+unexplained, and on its own it cannot say how much of that is the bank's credit
+risk and how much is specific to the AT1. The bank's other bonds can. Under EU
+resolution the creditor hierarchy holds: CET1 absorbs losses first, then AT1,
+then Tier~2. BNP's Tier~2 bonds are exposed to the same resolution event as its
+AT1s, without coupon discretion, MDA restrictions, trigger or perpetual
+extension. Pricing them on the same simulated state
+(\S\ref{sec:t2model}, \S\ref{sec:capstruct}) splits the AT1 hazard into a part
+already priced in Tier~2 and an AT1-specific premium.
 
 %======================================================================
 \section{State dynamics}
@@ -174,14 +187,42 @@ The regulator may impose losses before the trigger. We model this as a
 doubly-stochastic (Cox) event with intensity proportional to the effective
 spread,
 \begin{equation}\label{eq:hazard}
-  \lambda_t = \lambda\,\frac{s_t}{s_0},
+  \lambda_t = \lambda\,\frac{s_t^+}{s_0},
 \end{equation}
-so $\lambda$ is today's hazard, and the hazard rises when spreads widen or
+so $\lambda$ is today's hazard (the Gaussian spread is floored at zero, so the
+hazard is never negative), and the hazard rises when spreads widen or
 capital falls inside the buffer. Recovery at PONV is zero. Linking the hazard to
 $s_t$ is what makes extension consistent: the states in which the issuer
 extends ($s_t>m$) are exactly those in which the bond is riskier and worth less.
 With a constant hazard, extension would be valued at a discount rate that does
 not reflect the state, and could even look valuable to the investor.
+
+\subsection{Tier~2 and senior bonds: the resolution hazard}\label{sec:t2model}
+Write the AT1 hazard as
+\begin{equation}\label{eq:split}
+  \lambda = \lambda_{\mathrm{res}} + \lambda_{\mathrm{spec}},
+\end{equation}
+where $\lambda_{\mathrm{res}}$ is the hazard of BNP's resolution (the event that
+also hits Tier~2) and $\lambda_{\mathrm{spec}}$ is everything the AT1 pays for
+beyond it: a write-down while the bank is not resolved, the risk premium of a
+perpetual, discretionary, equity-like claim, and its liquidity. Both scale with
+the same driver $s_t^+/s_0$.
+
+BNP's Tier~2 and senior non-preferred (SNP) notes are callable once, one year
+before maturity (or at a reset date), when they stop counting as capital or
+MREL; the market prices that call as certain, so each is a bullet to its call
+date $T$ with coupons $c_i$. At resolution the holder receives a fraction $R$ of
+face. With the Tier~2 exposed to $\lambda_{\mathrm{res}}$ only,
+\begin{equation}\label{eq:t2price}
+  B_0=\E\Biggl[\sum_{t_i\le T} c_i\,e^{-rt_i-\lambda_{\mathrm{res}}I_{t_i}}
+  + F e^{-rT-\lambda_{\mathrm{res}}I_T}
+  + R F\sum_{t_n<T}\bigl(e^{-\lambda_{\mathrm{res}}I_{t_n}}-e^{-\lambda_{\mathrm{res}}I_{t_{n+1}}}\bigr)e^{-rt_{n+1}}\Biggr],
+\end{equation}
+where the last sum is the conditional probability of resolution in each grid
+step times the discounted recovery. Like \eqref{eq:cmc}, it is analytic in the
+hazard on a fixed set of paths, so $\lambda_{\mathrm{res}}$ is the root of
+$B_0=P^{\mathrm{clean}}+\mathrm{AI}$, solved on the same paths and random
+numbers as the AT1s.
 
 %======================================================================
 \section{Valuation}
@@ -231,7 +272,7 @@ Consequences for the numerics:
   \item PONV is never simulated as an event, which removes its sampling noise
   (Rao--Blackwellisation).
   \item On a fixed set of paths, $V_0(\lambda)$ is smooth and strictly decreasing
-  in $\lambda$ (because $I_t>0$). The market-implied hazard is therefore the unique root of
+  in $\lambda$ (because the driver starts at $s_0/s_0=1$, so $I_t>0$ for every $t>0$ on every path). The market-implied hazard is therefore the unique root of
   $V_0(\lambda)=P^{\mathrm{clean}}+\mathrm{AI}$ and is found with Brent's method.
   \item Cash flows and $I_t$ are stored per path once; each evaluation of
   $V_0(\lambda)$ is a vectorised sum.
@@ -280,25 +321,37 @@ $\sigma_J=0.5$, whose 95th-percentile jump (4.4pp) matches BNP's CET1 depletion
 in the EBA 2025 adverse scenario (4.2pp, fully loaded).
 
 \subsection{Regulatory geometry}
-From the 2025 requirement stack, $b=4.5+1.14=5.64\%$ and
-$w=2.5+1.5+0.73+0.14=4.87\%$ (conservation, G-SIB, countercyclical and
-systemic-risk buffers), so $\bmda=10.51\%$. The trigger is $\ctrig=5.125\%$ of
-group CET1.
+The floor is $b=4.5+1.14=5.64\%$ (Pillar~1 and the CET1 part of Pillar~2R,
+2025 stack). The combined buffer is set so that $b+w$ equals the latest
+published CET1 requirement, $10.43\%$ at 30 June 2026 ($w=4.79\%$:
+conservation, G-SIB/O-SII, countercyclical and systemic-risk buffers). The
+threshold is not constant: BNP's O-SII buffer rises by 25bp on 1 January 2027
+and again on 1 January 2028, and the higher of the G-SIB and O-SII buffers
+applies, so $w$ and $\bmda$ step up to $10.68\%$ and $10.93\%$ along every path.
+The trigger is $\ctrig=5.125\%$ of group CET1.
 
 \subsection{Market inputs}
 The inputs are:
 \begin{itemize}
-  \item the clean price of each bond (Capital IQ evaluated prices);
+  \item the clean price of each bond: the three AT1s, two Tier~2 notes
+  (5.906\% 2035NC34, 2.588\% 2035NC30) and one SNP note (5.738\% 2035NC34), all
+  in USD (Capital IQ evaluated prices, bid--offer 0.07--0.29 points);
   \item the FRED constant-maturity Treasury curve (DGS5, DGS7, DGS10): the 5-year
   CMT is the reset reference, and each bond is discounted at the yield
   interpolated at its first call date;
   \item the AT1 spread $S_0$, the average of (bond yield $-$ call-matched Treasury);
   \item the latest published CET1 ratio, with a 35-day publication lag;
-  \item the share price.
+  \item the share price;
+  \item BNP's senior CDS (EUR, MM14), used only as a reference point.
 \end{itemize}
 The spread process uses $a=0.5$, $\bar s$ equal to the sample mean (275bp),
 $\eta=100$bp and $\rho=-0.3$; the capital premium is $\beta=1\%$ per point of CET1 and the share
-stress is $\xi=0.2$.
+stress is $\xi=0.2$. Resolution recoveries follow the Markit conventions,
+$R=20\%$ for Tier~2 and $40\%$ for senior debt; the AT1 recovers nothing at
+PONV. The Tier~2 2035NC34 is the anchor for $\lambda_{\mathrm{res}}$: its call
+(November 2034) falls inside the AT1 call window (2033--2036). Raw Capital IQ
+exports are kept out of the public repository; the code rebuilds a single daily
+panel from them.
 
 \subsection{Implied hazard and cross-sectional identification}
 For each date and bond $j$ we solve $V_0^{(j)}(\lambda_j)=P_j$. The three bonds
@@ -306,7 +359,10 @@ share issuer, capital and trigger, so a correct model should give
 $\lambda_1=\lambda_2=\lambda_3$. The dispersion
 $D=\max_j\lambda_j-\min_j\lambda_j$ is a specification test, and it can be
 used to ask which values of the other parameters (the spread volatility $\eta$,
-the capital mean reversion $\kappa$) the three prices are consistent with.
+the capital mean reversion $\kappa$) the three prices are consistent with. Its
+power is limited by the data: one basis point of hazard is worth about $0.08$
+points of price, so a dispersion of a few basis points is of the order of the
+bid--offer of evaluated prices (\S\ref{sec:results}).
 
 %======================================================================
 \section{Analytics}
@@ -321,10 +377,11 @@ first call date, $y^{(k)}$ (semi-annual, bullet to $T_1$):
 $k$ & price $V^{(k)}$ \\
 \midrule
 0 & certain call at $T_1$, full coupons, no conversion, $\lambda=0$ (risk-free) \\
-1 & + PONV hazard $\lambda$ \\
-2 & + MDA coupon restriction \\
-3 & + conversion at the trigger \\
-4 & + economic call rule \eqref{eq:call} \ $=$ market price \\
+1 & + resolution hazard $\lambda_{\mathrm{res}}$ priced in Tier~2 \\
+2 & + AT1-specific hazard: total $\lambda=\lambda_{\mathrm{res}}+\lambda_{\mathrm{spec}}$ \\
+3 & + MDA coupon restriction \\
+4 & + conversion at the trigger \\
+5 & + economic call rule \eqref{eq:call} \ $=$ market price \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -355,7 +412,8 @@ $\partial V/\partial C_0$ is a finite difference on a grid of $C_0$.
 the base-case 5-year outlook (median, 50\% and 90\% bands of the simulated CET1).}
 \end{figure}
 CET1 was $12.97\%$ at June 2026 against a $10.43\%$ requirement: a cushion of
-$2.5$pp ($\approx$\,EUR~20bn). The trigger is $7.8$pp lower
+$2.5$pp ($\approx$\,EUR~20bn), which the O-SII step-ups shrink to $2.0$pp by 2028
+at constant capital. The trigger is $7.8$pp lower
 ($\approx$\,EUR~62bn of losses). Under the base-case dynamics, about $20\%$ of the
 simulated paths fall below the MDA threshold at some point in the next five
 years, while the trigger is almost never reached by diffusion alone: capital
@@ -370,10 +428,11 @@ risk for these bonds is first a coupon risk, then a conversion risk.
 \midrule
 Reset margin (bp) & 285 & 294 & 313 \\
 Clean price & 94.39 & 95.25 & 97.57 \\
-Model price with $\lambda=0$ & 114.8 & 117.6 & 118.2 \\
-Implied hazard $\lambda$ (\%/yr) & 2.33 & 2.31 & 2.31 \\
-$\Pr(\text{called at } T_1)$ & 51\% & 53\% & 60\% \\
-Lifetime $\Pr(\text{conversion})$ & 1.3\% & 1.5\% & 1.3\% \\
+Model price with $\lambda=0$ & 114.2 & 116.9 & 117.6 \\
+Implied hazard $\lambda$ (\%/yr) & 2.21 & 2.18 & 2.19 \\
+$\Pr(\text{called at } T_1)$ & 49\% & 52\% & 58\% \\
+Lifetime $\Pr(\text{conversion})$ & 1.4\% & 1.6\% & 1.4\% \\
+Bid--offer (points) & 0.26 & 0.29 & 0.15 \\
 \bottomrule
 \end{tabular}
 \caption{Last date, base case ($\kappa=0.35$, $\eta=100$bp).}
@@ -385,20 +444,84 @@ Dispersion of the implied hazards across the three bonds, by spread volatility:
 \toprule
 $\eta$ (bp) & 0 & 25 & 50 & 75 & 100 & 150 & 200\\
 \midrule
-$D(\eta)$ (bp of hazard) & 8.3 & 6.0 & 4.1 & 2.9 & \textbf{2.3} & 1.5 & 1.0\\
+$D(\eta)$ (bp of hazard) & 8.2 & 5.8 & 4.1 & 3.0 & \textbf{2.6} & 2.0 & 1.4\\
 \bottomrule
 \end{tabular}
 \end{center}
-A stochastic refinancing spread is clearly needed (8.3bp with a deterministic
-one), but the dispersion keeps falling as $\eta$ rises, so the cross-section does
-not pin $\eta$ down; $100$bp is kept as an assumption. Over 66 weekly dates the
-mean dispersion is $6.0$bp against $9.6$bp for the deterministic rule. With
-Capital IQ benchmark proxies instead of the FRED curve the last-date dispersion
-is $2.7$--$7.6$bp.
+A stochastic refinancing spread helps (8.2bp with a deterministic one), but the
+dispersion keeps falling as $\eta$ rises, so the cross-section does not pin
+$\eta$ down; $100$bp is kept as an assumption. Over 66 weekly dates the mean
+dispersion is $5.9$bp against $9.3$bp for the deterministic rule. With Capital IQ
+benchmark proxies instead of the FRED curve the last-date dispersion is
+$2.3$--$7.8$bp.
+
+These differences should not be over-read. One basis point of hazard is worth
+$0.08$ points of price, so the last-date dispersion of $2.6$bp is $0.20$--$0.22$
+points: of the size of the bid--offer of the evaluated prices ($0.15$--$0.29$).
+The three bonds are consistent with one hazard \emph{within the bid--offer};
+they cannot tell apart model variants whose dispersions differ by a few basis
+points.
 
 \begin{figure}[H]
 \centering\includegraphics[width=\textwidth]{implied_ponv.png}
 \caption{Implied PONV hazard per bond, weekly.}
+\end{figure}
+
+\subsection{What BNP's Tier~2 says: bank credit vs AT1-specific risk}\label{sec:capstruct}
+\begin{table}[H]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+ & Spread (bp) & Recovery & Hazard (\%/yr) & Share of AT1 hazard \\
+\midrule
+Senior CDS 5Y (EUR) & 57 & 40\% & 0.95 & 43\% \\
+Senior CDS 7Y (EUR, 27 Sep) & 68 & 40\% & 1.13 & 52\% \\
+SNP 5.738\% 2035NC34 & 103 & 40\% & 1.63 & 74\% \\
+T2 2.588\% 2035NC30 & 116 & 20\% & 1.40 & 64\% \\
+\textbf{T2 5.906\% 2035NC34} & \textbf{144} & \textbf{20\%} & \textbf{1.72} & \textbf{78\%} \\
+AT1 (average of three) & 275 & 0\% & 2.19 & 100\% \\
+\bottomrule
+\end{tabular}
+\caption{BNP's capital structure on 25 September 2026. Bond spreads are
+yield-to-call over the call-matched FRED Treasury; bond hazards are implied on the
+same simulated paths as the AT1s; CDS hazards use the credit triangle $s/(1-R)$.}
+\end{table}
+The ladder is orderly: each step down the capital structure pays more, and the
+two instruments that share the resolution event, Tier~2 and SNP, imply nearly
+the same hazard (1.72\% and 1.63\%) under the Markit recoveries. With the SNP at
+$40\%$, the Tier~2 recovery that equalises the two is $16\%$, close to the
+conventional $20\%$. The CDS sits lower, partly because it is quoted in EUR at
+shorter tenors and is more liquid than the cash bonds.
+
+\textbf{The split.} With the Tier~2 2035NC34 as anchor,
+\[
+  \lambda = 2.19\% = \underbrace{1.72\%}_{\lambda_{\mathrm{res}}:\ \text{priced in Tier~2}}
+  + \underbrace{0.47\%}_{\lambda_{\mathrm{spec}}:\ \text{AT1-specific}} ,
+\]
+so about four-fifths of the AT1 hazard is BNP's own credit risk, which the AT1
+holder would also bear in Tier~2 at a better recovery. Over the 66 weekly dates
+the Tier~2 share ranges from $66\%$ to $80\%$ (mean $72\%$). The split depends on
+the recovery assumed for Tier~2:
+\begin{center}
+\begin{tabular}{lccccc}
+\toprule
+Tier~2 recovery & 0\% & 10\% & 20\% & 30\% & 40\% \\
+\midrule
+$\lambda_{\mathrm{res}}$ (\%/yr) & 1.37 & 1.53 & 1.72 & 1.97 & 2.30 \\
+$\lambda_{\mathrm{spec}}$ (\%/yr) & 0.82 & 0.67 & 0.47 & 0.23 & $-0.11$ \\
+Share of AT1 hazard & 63\% & 70\% & 78\% & 90\% & 105\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+A Tier~2 recovery as high as the senior one would leave nothing for the AT1
+premium, which is implausible; any recovery up to $30\%$ attributes at least
+three-fifths of the AT1 hazard to bank credit.
+\begin{figure}[H]
+\centering\includegraphics[width=\textwidth]{capital_structure.png}
+\caption{Left: implied hazards down BNP's capital structure. Right: the AT1
+hazard (average of the three bonds), weekly, split into the part priced in the
+Tier~2 2035NC34 and the AT1-specific premium; the SNP and the short Tier~2 are
+shown for comparison.}
 \end{figure}
 
 \subsection{What the spread pays for}
@@ -408,10 +531,11 @@ is $2.7$--$7.6$bp.
 \toprule
 bp of yield-to-call spread & 6.875\% NC33 & 7.20\% NC36 & 7.45\% NC35 \\
 \midrule
-PONV / tail / liquidity & 243 & 240 & 239 \\
-MDA coupon cuts & 20 & 22 & 22 \\
-Conversion at the trigger & 4 & 5 & 4 \\
-Extension & 12 & 7 & 4 \\
+Resolution risk (priced in Tier~2) & 181 & 181 & 180 \\
+AT1-specific premium & 52 & 49 & 49 \\
+MDA coupon cuts & 27 & 31 & 30 \\
+Conversion at the trigger & 4 & 4 & 4 \\
+Extension & 15 & 9 & 6 \\
 \midrule
 Total $=$ market & 279 & 274 & 269 \\
 \bottomrule
@@ -420,12 +544,15 @@ Total $=$ market & 279 & 274 & 269 \\
 \begin{figure}[H]
 \centering\includegraphics[width=0.85\textwidth]{spread_decomposition.png}
 \end{figure}
-With BNP's capital dynamics, mechanical conversion is a 1.3--1.5\% lifetime
-event worth $\approx4$bp. Almost all of the spread is
-compensation for regulatory write-down before the trigger, tail risk beyond the
-historical sample, and liquidity. The extension component decreases with the
-reset margin, as the theory requires. The split between the premium and the
-MDA component depends on $\kappa$ (\S\ref{sec:uncert}); the total does not.
+Two-thirds of the spread, about $180$bp, is resolution risk that BNP's Tier~2
+also prices; another $50$bp is the premium for being an AT1 rather than a
+Tier~2 (write-down without resolution, the equity-like perpetual and
+discretionary profile, liquidity). The mechanical features explain the rest:
+expected MDA coupon cuts $\approx30$bp (an upper bound, see the limitations),
+conversion at the trigger, a 1.4--1.6\% lifetime event, $\approx4$bp, and
+extension $6$--$15$bp, decreasing in the reset margin as the theory requires.
+The split between the AT1 premium and the MDA component depends on $\kappa$
+(\S\ref{sec:uncert}); the total and the resolution component do not.
 
 \subsection{Call and extension}
 \begin{table}[H]
@@ -435,8 +562,8 @@ MDA component depends on $\kappa$ (\S\ref{sec:uncert}); the total does not.
  & 6.875\% NC33 & 7.20\% NC36 & 7.45\% NC35 \\
 \midrule
 Margin $-$ today's AT1 spread (bp) & $+6$ & $+15$ & $+34$ \\
-Cost of the issuer's option (pts) & 0.63 & 0.47 & 0.26 \\
-P\&L, spreads $+50$bp (pts) & $-3.4$ & $-3.6$ & $-3.3$ \\
+Cost of the issuer's option (pts) & 0.78 & 0.59 & 0.37 \\
+P\&L, spreads $+50$bp (pts) & $-3.3$ & $-3.5$ & $-3.2$ \\
 \quad of which from extension (pts) & $-1.2$ & $-0.9$ & $-0.7$ \\
 \bottomrule
 \end{tabular}
@@ -455,20 +582,25 @@ other two.
 \toprule
 Clean price change (points) & 6.875\% NC33 & 7.20\% NC36 & 7.45\% NC35 \\
 \midrule
-Rates $+100$bp & $-5.2$ & $-6.3$ & $-6.1$ \\
-CET1 $-2$pp & $-1.2$ & $-1.2$ & $-1.2$ \\
-CET1 $-4.2$pp (EBA adverse) & $-8.3$ & $-9.5$ & $-8.9$ \\
-AT1 spreads $+200$bp & $-16.9$ & $-16.8$ & $-16.0$ \\
-EBA adverse $+$ spreads $+200$bp & $-24.6$ & $-25.6$ & $-24.2$ \\
-PONV hazard $\times3$ & $-26.8$ & $-29.0$ & $-27.9$ \\
+Rates $+100$bp & $-5.3$ & $-6.4$ & $-6.1$ \\
+CET1 $-2$pp & $-1.5$ & $-1.6$ & $-1.6$ \\
+CET1 $-4.2$pp (EBA adverse) & $-9.8$ & $-11.1$ & $-10.4$ \\
+AT1 spreads $+200$bp & $-16.4$ & $-16.2$ & $-15.4$ \\
+EBA adverse $+$ spreads $+200$bp & $-25.4$ & $-26.6$ & $-25.1$ \\
+Bank credit: Tier~2-priced hazard $\times2$ & $-11.9$ & $-13.0$ & $-12.3$ \\
+AT1-specific premium $\times2$ & $-3.6$ & $-3.8$ & $-3.6$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 \begin{figure}[H]
 \centering\includegraphics[width=0.8\textwidth]{price_vs_cet1.png}
 \end{figure}
-The capital delta is $\approx0.45$ points per point of CET1 at $13\%$ and
-$\approx4$ around and below the MDA threshold. Crossing $\bmda$ switches on three
+The two hazard shocks replace an arbitrary ``hazard $\times3$'' scenario with
+ones that have a market counterpart: doubling the resolution hazard is what a
+doubling of BNP's Tier~2 spread would imply, and it costs three times as much as
+doubling the AT1-specific premium. The capital delta is $\approx0.6$ points per
+point of CET1 at $13\%$ (CET1 $\pm0.5$pp) and $\approx4$ at the MDA threshold
+($\pm0.25$pp), the same definitions as in \S\ref{sec:uncert}. Crossing $\bmda$ switches on three
 mechanisms at once: coupons are cut by \eqref{eq:mda}, the call is blocked by
 \eqref{eq:call}, and the hazard rises through \eqref{eq:seff}--\eqref{eq:hazard}.
 For risk management, the distance that matters is the distance to the MDA
@@ -488,11 +620,11 @@ capital shock, $\ln 2/\kappa$, lies between 1.5 and 11 years (point estimate 4.2
 Average of the three bonds & $\kappa=0.06$ & $\kappa=0.165$ & $\kappa=0.35$ & $\kappa=0.48$ \\
  & (5\%) & (history) & (base) & (95\%) \\
 \midrule
-Implied PONV (\%/yr) & 0.9 & 1.9 & 2.3 & 2.4 \\
-MDA coupon cost (pts) & 10.9 & 4.4 & 1.7 & 1.2 \\
-Capital delta at the MDA threshold (pts/pp) & 12.9 & 7.0 & 3.3 & 2.3 \\
-EBA adverse shock (pts) & $-35.6$ & $-18.7$ & $-8.9$ & $-6.4$ \\
-Cross-bond dispersion $D$ (bp) & 8.6 & 4.0 & 2.3 & 1.9 \\
+Implied PONV (\%/yr) & 0.7 & 1.6 & 2.2 & 2.3 \\
+MDA coupon cost (pts) & 14.5 & 6.3 & 2.5 & 1.7 \\
+Capital delta at the MDA threshold (pts/pp) & 13.7 & 8.8 & 4.2 & 2.8 \\
+EBA adverse shock (pts) & $-37.7$ & $-21.4$ & $-10.5$ & $-7.3$ \\
+Cross-bond dispersion $D$ (bp) & 7.8 & 4.2 & 2.6 & 2.3 \\
 History log-likelihood (relative to MLE) & $-0.5$ & $0$ & $-1.5$ & $-4.1$ \\
 \bottomrule
 \end{tabular}
@@ -505,9 +637,11 @@ $\kappa$ range. Right: cross-bond dispersion of the implied hazard against $\kap
 \end{figure}
 
 \textbf{What prices add.} History and prices pull in opposite directions. The
-three bonds are mutually consistent only for fast capital rebuilding: $D$ falls
-from 8.6bp at $\kappa=0.06$ to 1.9bp at $0.48$ and then flattens. The history,
-however, rejects values much above 0.35. The base case $\kappa=0.35$
+three bonds are more consistent with fast capital rebuilding: $D$ falls from
+7.8bp at $\kappa=0.06$ to 2.3bp at $0.48$ and then flattens. In price terms that
+is $0.6$ against $0.2$ points, around the bid--offer, so the evidence is a lean,
+not an identification. The history, for its part, disfavours values much above
+0.35 (a likelihood-ratio statistic of 3 at $\kappa=0.35$, 8 at $0.48$). The base case $\kappa=0.35$
 (half-life two years) lies inside the historical interval and close to the
 market plateau. It is also consistent with BNP's active capital management (a
 13\% target, managed RWA and distributions). The ordering of the bonds, the
@@ -518,8 +652,8 @@ premium--MDA split do not, and are reported with this range.
 \textbf{Where the uncertainty sits.} Each curve in Figure~\ref{fig:cliffunc} is
 re-calibrated to today's price of the 6.875\%, so all four scenarios agree at
 today's $13\%$ CET1 (94.4). They separate only as capital falls: at the MDA
-threshold the price ranges from 80 ($\kappa=0.06$) to 93 ($\kappa=0.48$), and at
-$6\%$ CET1 from 36 to 79. Prices identify the level of risk today, not the shape
+threshold the price ranges from 76 ($\kappa=0.06$) to 93 ($\kappa=0.48$), and at
+$6\%$ CET1 from 36 to 77. Prices identify the level of risk today, not the shape
 of the cliff.
 \begin{figure}[H]
 \centering\includegraphics[width=0.8\textwidth]{capital_cliff_uncertainty.png}
@@ -534,18 +668,42 @@ re-calibrated to today's price. Shaded: 90\% bootstrap range of $\kappa$.}
 \begin{enumerate}
   \item \textbf{Measure.} CET1 is not traded. Its dynamics are estimated under
   the physical measure, and all remaining risk premia are absorbed by $\lambda$,
-  which is therefore a risk-neutral hazard, not a default probability.
+  which is therefore a risk-neutral hazard, not a default probability. The
+  Tier~2 anchor splits it, but $\lambda_{\mathrm{res}}$ is risk-neutral too.
+  \item \textbf{Recovery at resolution.} $\lambda_{\mathrm{res}}$ depends on the
+  Tier~2 recovery (\S\ref{sec:capstruct}); with the senior bond at $40\%$, the
+  market data are consistent with a Tier~2 recovery near the conventional $20\%$,
+  but neither is observed.
   \item \textbf{Capital mean reversion.} $\kappa$ is weakly identified by 50
   quarters of history and drives the capital stress results
   (\S\ref{sec:uncert}); the base case combines history and prices.
+  \item \textbf{MDA mechanics.} The MDA caps \emph{all} distributions (dividends,
+  buy-backs, variable pay, AT1 coupons) at a fraction of distributable profit;
+  a bank inside the buffer would cut dividends first. Applying the quartile
+  factor to the coupon itself, as \eqref{eq:mda} does, overstates the MDA
+  component. The binding constraint may also be the leverage-ratio or MREL MDA,
+  and available distributable items, none of which is modelled.
+  \item \textbf{Call behaviour.} The call rule is purely economic. European
+  national champions have almost always called at the first date for
+  reputational reasons; a reputational margin $\delta$ in \eqref{eq:call}
+  ($m>s_T-\delta$) would raise the call probabilities, and the approval test
+  under CRR art.~77--78 is not the MDA test.
+  \item \textbf{Systemic and sovereign risk.} The spread process is
+  issuer-specific and capital jumps do not move spreads. AT1 spreads widened by
+  hundreds of basis points in March 2020 and March 2023 with no change in
+  capital, and after the valuation date BNP's senior spreads widened with French
+  sovereign stress (CDS 5y from 57 to 74bp by 27 October 2026). A common
+  sector/sovereign factor with co-jumps is the main extension.
   \item \textbf{Rates.} Today's FRED curve is used for all future resets; a
   short-rate model (Hull--White) would add rate-driven extension.
   \item \textbf{Spread volatility.} $\eta$ is not pinned down by the cross-section.
   \item \textbf{Capital premium.} $\beta$ controls the size of the capital cliff
   and is assumed. A cross-bank regression of AT1 spreads on MDA distance would
   calibrate it.
-  \item \textbf{Data.} Prices are evaluated rather than traded, and cover
-  15 months of tight spreads.
+  \item \textbf{Data.} Prices are evaluated rather than traded, cover 15 months
+  of tight spreads, and the bid--offer is of the size of the cross-bond hazard
+  dispersion. TRACE prints would test the results on transactions. The CDS is
+  quoted in EUR, the bonds in USD.
   \item \textbf{Conversion.} A single stressed share price replaces a joint
   equity--capital process, and PONV recovery is set to zero.
 \end{enumerate}
@@ -561,12 +719,14 @@ Symbol & Meaning & Value & Source \\
 $\kappa,\sigma$ & CET1 mean reversion, volatility & 0.35, 0.47pp & MLE 0.165/0.44; base (\S\ref{sec:uncert}) \\
 $\theta$ & CET1 target & 13\% & BNP strategic plan \\
 $\lambda_J, m_J, \sigma_J$ & stress jumps & 0.12, 2.2pp, 0.5 & EBA 2025 check \\
-$b, w$ & MDA floor, combined buffer & 5.64\%, 4.87\% & requirement stack \\
+$b, w$ & MDA floor, combined buffer & 5.64\%, 4.79\% (+0.25pp 2027, 2028) & requirement, O-SII schedule \\
 $\ctrig$ & trigger & 5.125\% & term sheets \\
 $a, \bar s, \eta, \rho$ & spread OU & 0.5, 275bp, 100bp, $-0.3$ & sample, assumption \\
 $\beta$ & capital premium & 1\% per pp & assumption \\
 $\xi$ & share at trigger / today & 0.2 & assumption \\
-$\lambda$ & PONV hazard today & $\approx2.3\%$ & implied \\
+$\lambda$ & PONV hazard today & $\approx2.2\%$ & implied (AT1s) \\
+$\lambda_{\mathrm{res}}$ & resolution hazard & $1.7\%$ & implied (T2 2035NC34) \\
+$R_{\mathrm{T2}}, R_{\mathrm{SNP}}$ & recovery at resolution & 20\%, 40\% & Markit conventions \\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -581,8 +741,11 @@ File & Content \\
 \texttt{processes.py} & CET1 jump-diffusion \eqref{eq:cet1}, trigger times \\
 \texttt{instrument.py} & MDA schedule \eqref{eq:mda}, stylised term sheet \\
 \texttt{pricer.py}, \texttt{risk.py} & original engine, Greeks, loss distribution \\
-\texttt{market.py} & dated bonds, \eqref{eq:spread}--\eqref{eq:hazard}, pricing \eqref{eq:cmc}, implied $\lambda$ \\
+\texttt{market.py} & dated bonds, \eqref{eq:spread}--\eqref{eq:hazard}, pricing \eqref{eq:cmc}, implied $\lambda$; \\
+ & Tier~2/SNP bullets \eqref{eq:t2price}, implied $\lambda_{\mathrm{res}}$ \\
+\texttt{data.py}, \texttt{build\_bnp\_dataset.py} & data layout, Capital IQ exports to one panel \\
 \texttt{calibrate\_bnp.py} & calibration (\S\ref{sec:calib}) \\
+\texttt{capital\_structure.py} & Tier~2/SNP/CDS anchor (\S\ref{sec:capstruct}) \\
 \texttt{spread\_and\_stress.py} & decomposition, call analysis, stress \\
 \texttt{parameter\_uncertainty.py} & bootstrap, $\kappa$ sensitivity (\S\ref{sec:uncert}) \\
 \bottomrule

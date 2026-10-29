@@ -22,11 +22,13 @@ driver.
 
 **Case study → [RESEARCH.md](RESEARCH.md):** the model calibrated to BNP Paribas's
 three USD AT1s (Capital IQ prices, 50 quarters of CET1, FRED Treasury curve, EBA
-stress test). It decomposes the ~270bp spread (≈240bp PONV/tail premium, ≈21bp MDA
-coupon cuts, ≈4bp conversion, 4–12bp extension), prices the first call as a 51–60%
-event, and shows the capital cliff: ~0.45pt per point of CET1 today, ~4pt around the
-MDA threshold. A bootstrap shows the speed of capital mean reversion is the weakest
-input, and the bond prices help pin it down.
+stress test), anchored to BNP's own Tier 2 and senior non-preferred bonds. Of the
+~270–280bp spread, ≈180bp is bank resolution risk already priced in Tier 2, ≈50bp an
+AT1-specific premium, ≈30bp MDA coupon cuts, ≈4bp conversion and 6–15bp extension.
+The first call is a 49–58% event; the capital cliff is ~0.6pt per point of CET1 today
+and ~4pt at the MDA threshold. A bootstrap shows the speed of capital mean reversion
+is the weakest input; bond prices lean towards the faster end but, within the
+bid–offer, do not pin it down.
 
 ## Why this framing
 
@@ -63,18 +65,24 @@ at1-coco-pricer/
 │   ├── instrument.py    ← AT1 term sheet + MDA schedule
 │   ├── pricer.py        ← Monte-Carlo cash-flow engine
 │   ├── risk.py          ← CRN Greeks, absorption term structure, loss dist.
-│   └── market.py        ← dated bonds, stochastic refi spread, implied PONV
-├── tests/               ← 24 tests (dynamics, MDA, pricing, risk signs, market)
+│   ├── market.py        ← dated AT1s, stochastic refi spread, implied PONV,
+│   │                       T2/SNP bullets with recovery (resolution hazard)
+│   └── data.py          ← paths and loaders for data/
+├── tests/               ← 30 tests (dynamics, MDA, pricing, risk signs, market, T2)
 ├── scripts/
 │   ├── price_example.py
 │   ├── trigger_term_structure.py
-│   ├── build_dataset.py     ← Capital IQ exports -> tidy CSVs
+│   ├── build_bnp_dataset.py ← Capital IQ exports -> data/processed/
 │   ├── market_analysis.py   ← capital and price analysis
 │   ├── calibrate_bnp.py     ← implied PONV and cross-bond test
+│   ├── capital_structure.py ← T2/SNP/CDS anchor: bank resolution vs AT1-specific hazard
 │   ├── spread_and_stress.py ← spread decomposition, call odds, stress tests
 │   ├── parameter_uncertainty.py ← bootstrap of CET1 dynamics, kappa sensitivity
 │   └── make_video.py        ← animated charts
-├── data/                ← term sheets + public data (CIQ data kept local)
+├── data/
+│   ├── raw/             ← Capital IQ exports (licensed, gitignored)
+│   ├── reference/       ← term sheets, requirements, FRED (public)
+│   └── processed/       ← built by build_bnp_dataset.py (gitignored)
 └── results/             ← generated figures
 ```
 

@@ -84,3 +84,65 @@ def test_issuer_call_option_costs_the_investor(randoms):
     p_big = cash_flow_profile(BOND, replace(MKT, cet1=9.0), ms, randoms).dirty_price(r, lam)
     assert p_model > p_small > p_big
     assert (p_small - p_big) > (p_model - p_small)
+
+
+def test_buffer_path_steps():
+    from at1_coco.market import buffer_path
+    from dataclasses import replace
+    ms = replace(_ms(), combined_buffer=4.79, buffer_steps=(("2027-01-01", 0.25), ("2028-01-01", 0.25)))
+    t = np.array([0.0, 0.5, 1.5])
+    w = buffer_path(ms, pd.Timestamp("2026-09-25"), t)
+    assert np.allclose(w, [4.79, 5.04, 5.29])
+
+
+def _t2_setup(randoms):
+    from at1_coco.market import DatedBullet, hazard_state
+    bond = DatedBullet(isin="US09659T2D24", coupon=0.05906, call_date=pd.Timestamp("2034-11-19"))
+    ms = _ms(vol=0.01)
+    return bond, ms, hazard_state(MKT, ms, randoms)
+
+
+def test_t2_accrued_matches_capital_iq():
+    from at1_coco.market import DatedBullet
+    bond = DatedBullet(isin="US09659T2D24", coupon=0.05906, call_date=pd.Timestamp("2034-11-19"))
+    # CIQ bond detail on 27-Oct-2026: T0 accrued 2.592 (158 days, 30/360)
+    assert bond.accrued(pd.Timestamp("2026-10-27")) == pytest.approx(2.592, abs=1e-3)
+
+
+def test_bullet_without_risk_is_discounted_cash_flows(randoms):
+    from at1_coco.market import bullet_profile
+    bond, ms, st = _t2_setup(randoms)
+    prof = bullet_profile(bond, st, MKT.val_date, ms.dt)
+    r = 0.045
+    t = bond.schedule(MKT.val_date)
+    expected = (bond.coupon * 50 * np.exp(-r * t)).sum() + 100 * np.exp(-r * t[-1])
+    assert prof.dirty_price(r, 0.0, 0.2) == pytest.approx(expected, rel=1e-12)
+
+
+def test_full_recovery_removes_credit_risk(randoms):
+    from at1_coco.market import bullet_profile
+    bond, ms, st = _t2_setup(randoms)
+    prof = bullet_profile(bond, st, MKT.val_date, ms.dt)
+    p0 = prof.dirty_price(0.045, 0.0, 1.0)
+    # recovery of par paid at default instead of later cash flows: close to, not exactly, riskless
+    assert prof.dirty_price(0.045, 0.05, 1.0) == pytest.approx(p0, rel=0.03)
+
+
+def test_bullet_price_decreasing_in_hazard_and_increasing_in_recovery(randoms):
+    from at1_coco.market import bullet_profile
+    bond, ms, st = _t2_setup(randoms)
+    prof = bullet_profile(bond, st, MKT.val_date, ms.dt)
+    p = [prof.dirty_price(0.045, lam, 0.2) for lam in (0.0, 0.01, 0.02, 0.04)]
+    assert all(a > b for a, b in zip(p, p[1:]))
+    assert prof.dirty_price(0.045, 0.02, 0.4) > prof.dirty_price(0.045, 0.02, 0.0)
+
+
+def test_implied_resolution_hazard_roundtrip(randoms):
+    from at1_coco.market import bullet_profile, implied_resolution_hazard
+    bond, ms, st = _t2_setup(randoms)
+    prof = bullet_profile(bond, st, MKT.val_date, ms.dt)
+    y = 0.05
+    dirty = prof.dirty_price(cont_rate(y), 0.015, 0.2)
+    clean = dirty - bond.accrued(MKT.val_date)
+    lam, _ = implied_resolution_hazard(bond, clean, y, st, MKT.val_date, ms.dt, 0.2)
+    assert lam == pytest.approx(0.015, abs=1e-6)

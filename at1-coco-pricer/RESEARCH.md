@@ -19,31 +19,58 @@ They differ only in coupon, first call and reset margin:
 
 ## Key findings
 
-1. **Almost all of the spread pays for regulatory write-down and tail risk, not for the trigger.**
-   Of the ~270–280bp, about **240bp** is PONV / tail / liquidity premium, **20–22bp**
-   expected MDA coupon cuts, **4–5bp** mechanical conversion and **4–12bp** extension
-   risk. With BNP's capital dynamics and no PONV risk, the bonds would be worth
-   115–118, against a market price of 94–98.
+1. **Most of the spread is BNP's own credit risk, already priced in its Tier 2.**
+   Pricing BNP's Tier 2 (5.906% 2035NC34) and senior non-preferred bonds on the same
+   simulated state splits the AT1 hazard (2.19%/yr) into **1.72% of bank resolution
+   risk** (Tier 2 recovery 20%) and **0.47% AT1-specific premium**. In spread terms,
+   of the ~270–280bp: **~180bp** resolution risk, **~50bp** AT1-specific premium,
+   **27–31bp** expected MDA coupon cuts, **4bp** mechanical conversion and **6–15bp**
+   extension. Tier 2 (R = 20%) and SNP (R = 40%) imply nearly the same hazard
+   (1.72% vs 1.63%), so the Markit recovery conventions are consistent with the prices.
 2. **The first call is a coin flip, and the 6.875% carries the most extension risk.**
-   The model gives a **51% / 53% / 60%** probability of a call at the first reset.
+   The model gives a **49% / 52% / 58%** probability of a call at the first reset.
    The 6.875%'s reset margin is only ~6bp above today's AT1 spread. If AT1 spreads
    settle 50bp wider, it loses **1.2pt more than if the call were certain**, against
    0.7pt for the 7.45%. The market behaved like this in the four weeks to 25 September
    2026: with the 10y Treasury up 45bp, the 6.875%'s spread widened a further
    +34bp, the other two only +10–12bp.
 3. **Capital risk is a cliff, not a slope.** At today's 13% CET1 the price moves only
-   **~0.45pt per point of CET1**; around the MDA threshold (10.5%) the sensitivity is
-   **~4pt per point**. The EBA adverse depletion (−4.2pp) costs **~9pt**, and **~25pt**
-   if spreads also widen 200bp.
-4. **The weakest input is how fast BNP rebuilds capital, and bond prices help pin it down.**
-   History alone puts the half-life of a capital shock anywhere between 1.5 and 11
-   years, and the stress results change by a factor of 6 across that range. The three
-   bond prices are only mutually consistent with the faster end. The base case
+   **~0.6pt per point of CET1**; at the MDA threshold (10.43%, rising to 10.93% by
+   2028 with the O-SII step-ups) the sensitivity is **~4pt per point**. The EBA adverse
+   depletion (−4.2pp) costs **~10–11pt**, and **~25–27pt** if spreads also widen 200bp.
+4. **The weakest input is how fast BNP rebuilds capital.** History alone puts the
+   half-life of a capital shock anywhere between 1.5 and 11 years, and the stress
+   results change by a factor of 5 across that range. Bond prices lean towards the
+   faster end, but the differences are of the size of the bid–offer. The base case
    (κ = 0.35, half-life 2 years) is the value both sources can live with.
-5. **One set of issuer-risk parameters prices all three bonds.** The implied PONV
-   hazards (2.33% / 2.31% / 2.31%) agree within 2.3bp on the last date.
+5. **One hazard prices all three AT1s, within the bid–offer.** The implied hazards
+   (2.21% / 2.18% / 2.19%) are 2.6bp apart on the last date: 0.20–0.22 points of
+   price, against a bid–offer of 0.15–0.29 points.
 
-## 1. What the spread pays for
+## 1. What BNP's Tier 2 says
+
+![Capital structure](results/capital_structure.png)
+
+Under EU resolution the creditor hierarchy holds: CET1 absorbs losses first, then
+AT1, then Tier 2. BNP's Tier 2 bonds face the same resolution event as its AT1s,
+without coupon discretion, MDA, trigger or perpetual extension. Priced on the same
+simulated paths (bullet to the call, which the market treats as certain, recovery
+paid at resolution), they show how much of the AT1 hazard is plain bank credit risk.
+
+| 25-Sep-2026 | Spread (bp) | Recovery | Hazard (%/yr) | Share of AT1 hazard |
+|---|---|---|---|---|
+| Senior CDS 5Y (EUR) | 57 | 40% | 0.95 | 43% |
+| Senior CDS 7Y (EUR, 27-Sep) | 68 | 40% | 1.13 | 52% |
+| SNP 5.738% 2035NC34 | 103 | 40% | 1.63 | 74% |
+| T2 2.588% 2035NC30 | 116 | 20% | 1.40 | 64% |
+| **T2 5.906% 2035NC34 (anchor)** | **144** | **20%** | **1.72** | **78%** |
+| AT1 (average of three) | 275 | 0% | 2.19 | 100% |
+
+Over the 66 weekly dates the Tier 2 share of the AT1 hazard ranges from 66% to 80%
+(mean 72%). It depends on the Tier 2 recovery: 63% at 0%, 78% at 20%, 90% at 30%. With
+the SNP at 40%, the Tier 2 recovery that equalises the two hazards is 16%.
+
+## 2. What the spread pays for
 
 ![Spread decomposition](results/spread_decomposition.png)
 
@@ -53,25 +80,28 @@ yield-to-first-call spread over the Treasury used for discounting, so the compon
 
 | bp of yield-to-call spread | 6.875% NC33 | 7.20% NC36 | 7.45% NC35 |
 |---|---|---|---|
-| PONV / tail / liquidity premium | 243 | 240 | 239 |
-| MDA coupon cuts | 20 | 22 | 22 |
-| Mechanical conversion at 5.125% | 4 | 5 | 4 |
-| Extension (issuer's call option) | 12 | 7 | 4 |
+| Resolution risk (priced in Tier 2) | 181 | 181 | 180 |
+| AT1-specific premium | 52 | 49 | 49 |
+| MDA coupon cuts | 27 | 31 | 30 |
+| Mechanical conversion at 5.125% | 4 | 4 | 4 |
+| Extension (issuer's call option) | 15 | 9 | 6 |
 | **Total = market** | **279** | **274** | **269** |
 
-The order is: premium first (so every later feature is valued with risky
+The order is: hazard first (so every later feature is valued with risky
 discounting), extension last (valued with every other feature in place). The
 extension cost falls with the reset margin, as it should.
 
-**How to read the premium.** BNP's CET1 sits 7.8pp (about €62bn of losses) above the
-trigger. With its historical volatility, mechanical conversion is a ~1.3–1.5% lifetime
-event worth only ~4bp. The market charges ~240bp for something else: the resolution
-authority acting before the trigger, tail events beyond the historical sample, and
-liquidity. That is the Credit Suisse 2023 lesson, expressed as a number.
-*Caveat:* the split between the premium and the MDA component depends on how fast
-capital mean-reverts (section 5); the total does not.
+**How to read it.** BNP's CET1 sits 7.8pp (about €62bn of losses) above the trigger,
+so mechanical conversion is a ~1.4–1.6% lifetime event worth ~4bp. Two-thirds of the
+spread is resolution risk the Tier 2 also pays for; the AT1-specific ~50bp is what the
+market charges for a write-down without resolution (the Credit Suisse 2023 lesson),
+the perpetual and discretionary profile, and liquidity. The MDA component is an upper
+bound: the model applies the MDA quartile factor to the coupon itself, while a bank
+would cut dividends first. *Caveat:* the split between the AT1 premium and the MDA
+component depends on how fast capital mean-reverts (section 6); the total and the
+resolution component do not.
 
-## 2. Will BNP call?
+## 3. Will BNP call?
 
 ![Call probability](results/call_probability.png)
 
@@ -83,69 +113,74 @@ probability, not a certainty:
 | | 6.875% NC33 | 7.20% NC36 | 7.45% NC35 |
 |---|---|---|---|
 | Reset margin − today's AT1 spread | +6bp | +15bp | +34bp |
-| P(called at first reset) | 51% | 53% | 60% |
-| P(called at some reset) | 98% | 98% | 98% |
-| Cost of the issuer's option (pts) | 0.63 | 0.47 | 0.26 |
-| P&L if AT1 spreads settle +50bp | −3.4 | −3.6 | −3.3 |
+| P(called at first reset) | 49% | 52% | 58% |
+| P(called at some reset) | 97% | 98% | 98% |
+| Cost of the issuer's option (pts) | 0.78 | 0.59 | 0.37 |
+| P&L if AT1 spreads settle +50bp | −3.3 | −3.5 | −3.2 |
 | … of which extra loss from extension | −1.2 | −0.9 | −0.7 |
 
 - At a 200bp AT1 spread all three are called about three times out of four; at
   350bp only a quarter to a third are. The 6.875% is always the least likely to be called.
+- The rule is purely economic. European national champions have almost always called
+  at the first date for reputational reasons, so these probabilities are a floor.
 - **Negative convexity.** Wider spreads hurt twice: through discounting, and by
   making extension more likely. The effect is largest for the low-margin bond, and
   it shows in the data: in the September 2026 sell-off the 6.875%'s spread rose
   almost three times as much as its siblings'.
 
-## 3. What can you lose?
+## 4. What can you lose?
 
 ![Price vs CET1](results/price_vs_cet1.png)
 
-Each scenario reprices all three bonds on the same random numbers. The PONV hazard
+Each scenario reprices all three bonds on the same random numbers. The hazard
 moves with spreads, and with capital once CET1 falls inside the buffer.
 
 | Clean price change (pts) | 6.875% NC33 | 7.20% NC36 | 7.45% NC35 |
 |---|---|---|---|
-| Rates +100bp | −5.2 | −6.3 | −6.1 |
-| Rates −100bp | +5.6 | +6.9 | +6.6 |
-| CET1 −2pp (capital only) | −1.2 | −1.2 | −1.2 |
-| CET1 −4.2pp = EBA adverse (capital only) | −8.3 | −9.5 | −8.9 |
-| AT1 spreads +200bp | −16.9 | −16.8 | −16.0 |
-| March-2023 style: spreads +200bp, rates −50bp | −15.1 | −14.4 | −13.7 |
-| EBA adverse + spreads +200bp | −24.6 | −25.6 | −24.2 |
-| PONV scare (hazard ×3) | −26.8 | −29.0 | −27.9 |
+| Rates +100bp | −5.3 | −6.4 | −6.1 |
+| Rates −100bp | +5.7 | +7.0 | +6.7 |
+| CET1 −2pp (capital only) | −1.5 | −1.6 | −1.6 |
+| CET1 −4.2pp = EBA adverse (capital only) | −9.8 | −11.1 | −10.4 |
+| AT1 spreads +200bp | −16.4 | −16.2 | −15.4 |
+| March-2023 style: spreads +200bp, rates −50bp | −14.5 | −13.8 | −13.0 |
+| EBA adverse + spreads +200bp | −25.4 | −26.6 | −25.1 |
+| Bank credit shock: Tier 2-priced hazard ×2 | −11.9 | −13.0 | −12.3 |
+| AT1-specific shock: AT1 premium ×2 | −3.6 | −3.8 | −3.6 |
 
 **Capital delta** (price points per +1pp of CET1):
 
-| CET1 level | 13% (today) | 12% | 11% | 10.5% (MDA) | 9% | 7% |
+| CET1 level | 13% (today) | 12% | 11% | 10.5% (MDA 10.43%) | 9% | 7% |
 |---|---|---|---|---|---|---|
-| 6.875% NC33 | 0.4 | 0.6 | 1.5 | 3.7 | 4.1 | 4.6 |
-| 7.45% NC35 | 0.5 | 0.6 | 1.6 | 4.0 | 4.4 | 4.8 |
+| 6.875% NC33 | 0.6 | 0.8 | 1.7 | 4.4 | 4.6 | 4.6 |
+| 7.45% NC35 | 0.6 | 0.8 | 1.9 | 4.8 | 4.8 | 4.8 |
 
 Crossing the MDA threshold does three things at once: coupons are cut, the issuer
-cannot call, and the hazard rises. BNP's CET1 cushion was 2.5pp at June 2026 and
-only 2.1pp at end-2025, so a capital hit about half the size of the EBA adverse
-scenario moves these bonds from the flat part of the curve onto the cliff. For a
-portfolio, **the relevant risk number is the distance to the MDA threshold, not the
-distance to the trigger.**
+cannot call, and the hazard rises. BNP's CET1 cushion was 2.5pp at June 2026, and the
+O-SII step-ups take 0.5pp off it by 2028 at constant capital, so a capital hit about
+half the size of the EBA adverse scenario moves these bonds from the flat part of the
+curve onto the cliff. For a portfolio, **the relevant risk number is the distance to
+the MDA threshold, not the distance to the trigger.**
 
-## 4. Does the model hold up?
+## 5. Does the model hold up?
 
 ![Implied PONV](results/implied_ponv.png)
 
-- **Cross-section.** On 25-Sep-2026 the implied hazards are 2.33% / 2.31% / 2.31% a
-  year, 2.3bp apart. With a deterministic refinancing spread (the base package's
-  rule) they are 8.3bp apart.
-- **Time series (66 weeks).** The mean cross-bond gap is 6.0bp with a stochastic
-  refinancing spread against 9.6bp with the deterministic rule. Priced at the day's
-  common hazard, each bond's average error is within ±0.25pt (range −1.1 to +1.0).
-- **Implied hazard over time** ranged from 1.9% (August 2026) to 2.8% (late March
+- **Cross-section.** On 25-Sep-2026 the implied hazards are 2.21% / 2.18% / 2.19% a
+  year, 2.6bp apart (8.2bp with a deterministic refinancing spread). One basis point
+  of hazard is worth ~0.08 points, so 2.6bp is 0.20–0.22 points: the size of the
+  bid–offer (0.15–0.29). The bonds are consistent with one hazard within the
+  bid–offer, and cannot separate model variants a few basis points apart.
+- **Time series (66 weeks).** The mean cross-bond gap is 5.9bp with a stochastic
+  refinancing spread against 9.3bp with the deterministic rule. Priced at the day's
+  common hazard, each bond's average error is within ±0.25pt (range −1.1 to +1.1).
+- **Implied hazard over time** ranged from 1.8% (August 2026) to 2.7% (late March
   2026, when the bonds then outstanding fell 4–5 points), and rose again into the
   September sell-off.
 - **Rates.** With the FRED curve (5y CMT for the reset, call-matched yield for
-  discounting) the bonds are more consistent than with Capital IQ benchmark proxies
-  (2.3bp against 2.7–7.6bp on the last date).
+  discounting) the last-date gap is 2.6bp, against 2.3–7.8bp with Capital IQ
+  benchmark proxies.
 
-## 5. How much can we trust the capital parameters?
+## 6. How much can we trust the capital parameters?
 
 ![Parameter uncertainty](results/parameter_uncertainty.png)
 
@@ -164,24 +199,24 @@ Volatility is well estimated; the speed at which BNP rebuilds capital is not.
 
 | | κ = 0.06 (5%) | κ = 0.165 (history) | **κ = 0.35 (base)** | κ = 0.48 (95%) |
 |---|---|---|---|---|
-| Implied PONV (%/yr) | 0.9 | 1.9 | **2.3** | 2.4 |
-| MDA coupon cost (pts) | 10.9 | 4.4 | **1.7** | 1.2 |
-| Capital delta at the MDA threshold (pts/pp) | 12.9 | 7.0 | **3.3** | 2.3 |
-| EBA adverse shock (pts) | −35.6 | −18.7 | **−8.9** | −6.4 |
+| Implied PONV (%/yr) | 0.7 | 1.6 | **2.2** | 2.3 |
+| MDA coupon cost (pts) | 14.5 | 6.3 | **2.5** | 1.7 |
+| Capital delta at the MDA threshold (pts/pp) | 13.7 | 8.8 | **4.2** | 2.8 |
+| EBA adverse shock (pts) | −37.7 | −21.4 | **−10.5** | −7.3 |
 
-**What bond prices say.** The three bonds must imply the same PONV hazard. Their gap
-falls from 8.6bp at κ = 0.06 to 4.0bp at the historical estimate, 2.3bp at 0.35 and
-1.9bp at 0.48, then flattens. Bond prices are consistent only with fairly fast capital
-rebuilding, in the upper part of the historical interval, which fits BNP's active
-capital management (13% target, RWA and distribution policy). The history, however,
-rejects values much above 0.35 (its log-likelihood drops by 1.5 at 0.35 and by 4.1 at
-0.48). **κ = 0.35 is the base case**: inside the historical interval and close to the
-market plateau.
+**What bond prices say.** The three bonds should imply the same hazard. Their gap
+falls from 7.8bp at κ = 0.06 to 4.2bp at the historical estimate, 2.6bp at 0.35 and
+2.3bp at 0.48, then flattens: 0.6 against 0.2 points of price, around the bid–offer.
+Prices lean towards fairly fast capital rebuilding, which fits BNP's active capital
+management (13% target, RWA and distribution policy), but do not identify it. The
+history disfavours values much above 0.35 (its log-likelihood drops by 1.5 at 0.35
+and by 4.1 at 0.48). **κ = 0.35 is the base case**: inside the historical interval and
+close to where prices flatten.
 
 **Where the uncertainty sits.** Each curve below is re-calibrated to today's price of
 the 6.875%, so all four agree at today's 13% CET1 (94.4). They diverge only once
-capital falls: at the MDA threshold (10.5%) the price ranges from 80 (κ = 0.06) to 93
-(κ = 0.48), and at 6% CET1 from 36 to 79. The market pins down today's price, not the
+capital falls: at the MDA threshold (10.43%) the price ranges from 76 (κ = 0.06) to 93
+(κ = 0.48), and at 6% CET1 from 36 to 77. The market pins down today's price, not the
 shape of the cliff.
 
 ![Capital cliff uncertainty](results/capital_cliff_uncertainty.png)
@@ -193,18 +228,24 @@ the premium-vs-MDA split are not robust, and are reported with this range.
 
 ## Data
 
+Layout and file-by-file description: [data/README.md](data/README.md).
+
 | What | Source | File |
 |---|---|---|
-| Term sheets | BNP Paribas pricing term sheets | `data/bonds_static.csv` |
-| Evaluated bid/mid/ask, yield, spread to benchmark | S&P Capital IQ | `data/bond_prices.csv` |
-| CET1, Tier 1, RWA, leverage, quarterly 2008–2026 | S&P Capital IQ (SNL) | `data/bnp_cet1_quarterly.csv` |
-| CET1 requirement stack, annual 2019–2025 | S&P Capital IQ (SNL) | `data/bnp_capital_annual.csv` |
-| BNP share price | S&P Capital IQ | `data/bnp_share.csv` |
-| Treasury CMT 5y / 7y / 10y | FRED (DGS5, DGS7, DGS10) | `data/fred_treasury.csv` |
-| EBA 2025 stress test | EBA | `data/bnp_eba_stress_2025.csv` |
+| AT1 term sheets | BNP Paribas pricing term sheets | `data/reference/bonds_static.csv` |
+| T2 and SNP terms | BNP Paribas debt issuance list, pricing supplements | `data/reference/senior_t2_static.csv` |
+| Evaluated bid/mid/ask: 3 AT1s, 2 T2s, 1 SNP | S&P Capital IQ | `data/raw/ciq_bond_<ISIN>.xlsx` |
+| Senior CDS, EUR, MM14 (5y daily, curve snapshots) | S&P Capital IQ (Markit) | `data/raw/ciq_cds_bnp_snrfor_eur.xlsx` |
+| CET1, Tier 1, RWA, leverage, quarterly 2008–2026 | S&P Capital IQ (SNL) | `data/raw/ciq_capital_adequacy_quarterly.xlsx` |
+| CET1 requirement stack | S&P Capital IQ (SNL), BNP releases | `data/raw/ciq_basel_annual.xlsx`, `data/reference/bnp_srep_requirement.csv` |
+| BNP share price | S&P Capital IQ | `data/raw/ciq_bnp_share.xlsx` |
+| Treasury CMT 5y / 7y / 10y | FRED (DGS5, DGS7, DGS10) | `data/reference/fred_treasury.csv` |
+| EBA 2025 stress test | EBA | `data/reference/bnp_eba_stress_2025.csv` |
 
 Capital IQ data is licensed and kept out of the public repository (`.gitignore`);
-`scripts/build_dataset.py` rebuilds the tidy files from the raw exports.
+`scripts/build_bnp_dataset.py` turns the raw exports into `data/processed/`
+(one daily panel for all bonds, one instrument table, one capital table, and the
+same data in one workbook).
 
 ## Model and calibration
 
@@ -212,11 +253,12 @@ Capital IQ data is licensed and kept out of the public repository (`.gitignore`)
   target. History: exact-OU maximum likelihood on 50 quarters (2014Q1–2026Q2, Basel
   III only), excluding the 2023Q1 jump from the Bank of the West sale:
   κ = 0.165, σ = 0.44. Base case κ = 0.35 with σ = 0.47 re-estimated given κ
-  (section 5). Stress jumps (rate 0.12/yr, median 2.2pp): their 95th-percentile size,
+  (section 6). Stress jumps (rate 0.12/yr, median 2.2pp): their 95th-percentile size,
   4.4pp, matches the EBA adverse depletion of 4.2pp. CET1 is observed with a 35-day
   publication lag.
-- **MDA geometry** from the 2025 requirement stack: floor 5.64% (P1 + P2R), combined
-  buffer 4.87% (threshold 10.51%).
+- **MDA geometry**: floor 5.64% (P1 + P2R, 2025 stack); combined buffer set so that the
+  threshold equals the latest published CET1 requirement (10.43% at 30-Jun-2026), then
+  rising with the scheduled O-SII step-ups (+25bp on 1-Jan-2027 and 1-Jan-2028).
 - **New-issue AT1 spread**: OU, mean reversion 0.5, long-run = sample mean (275bp),
   100bp vol, correlation −0.3 with CET1 shocks, plus 1% per pp of CET1 inside the
   buffer. The cross-bond gap keeps shrinking as this vol rises (8.3bp at 0, 2.3bp at
@@ -228,20 +270,33 @@ Capital IQ data is licensed and kept out of the public repository (`.gitignore`)
 - **PONV**: hazard λ·s_t/s_0, proportional to the simulated issuer spread, priced
   analytically on each path (conditional Monte Carlo), so the implied hazard is solved
   exactly on one set of 20,000 paths.
+- **Tier 2 / SNP anchor**: bullets to their call date (treated as certain), recovery
+  20% (T2) / 40% (SNP) paid at resolution, hazard λ_res·s_t/s_0 on the same paths.
+  λ_res is implied from the T2 5.906% 2035NC34; λ_AT1 = λ_res + λ_spec.
 - **Rates**: FRED constant-maturity Treasuries. The 5y CMT is the reset reference;
   each bond is discounted at the yield interpolated at its first call.
 
 ## Limits, most important first
 
 1. **Capital mean reversion (κ)** is weakly identified by history and drives the
-   capital stress results (section 5). The base case combines history and prices.
-2. **Capital add-on** (1% of spread per pp of CET1 inside the buffer) also drives the
-   size of the cliff. It is an assumption; a cross-bank regression of AT1 spreads on
-   MDA distance would calibrate it.
-3. **Spread volatility** (100bp) is not pinned down by the cross-section.
-4. **Evaluated, not traded, prices**; a 15-month sample of tight spreads.
-5. **Rates are not stochastic**: today's curve is used for all future resets.
-6. **PONV recovery = 0**, and conversion value comes from a single stressed share price.
+   capital stress results (section 6). The base case combines history and prices.
+2. **Recovery at resolution.** The Tier 2 / AT1-specific split depends on the Tier 2
+   recovery (20% by Markit convention; 16% would equalise Tier 2 and SNP).
+3. **MDA mechanics.** The quartile factor is applied to the coupon, while the MDA caps
+   all distributions and a bank would cut dividends first: the MDA component is an
+   upper bound. Leverage-ratio and MREL MDAs and distributable items are not modelled.
+4. **Call behaviour** is purely economic; reputational calls would raise the
+   probabilities.
+5. **No systemic or sovereign factor.** Spreads are issuer-specific and capital jumps
+   do not move them. After the valuation date BNP's senior spreads widened with French
+   sovereign stress (CDS 5y 57 → 74bp by 27-Oct-2026).
+6. **Capital add-on** (1% of spread per pp of CET1 inside the buffer) drives the size
+   of the cliff and is assumed.
+7. **Spread volatility** (100bp) is not pinned down by the cross-section.
+8. **Evaluated, not traded, prices**; a 15-month sample of tight spreads; bid–offer of
+   the size of the cross-bond hazard gap. The CDS is in EUR, the bonds in USD.
+9. **Rates are not stochastic**: today's curve is used for all future resets.
+10. **PONV recovery = 0**, and conversion value comes from a single stressed share price.
 
 ## Reproduce
 
@@ -251,11 +306,12 @@ bash run_all.sh            # everything: data, tests, figures, video, PDF (~25 m
 bash run_all.sh --quick    # same, without the weekly calibration (~15 min)
 ```
 
-`run_all.sh` runs, in order: `build_dataset.py` (raw CIQ exports -> tidy CSVs),
-`pytest` (24 tests), `market_analysis.py`, `calibrate_bnp.py`, `spread_and_stress.py`,
+`run_all.sh` runs, in order: `build_bnp_dataset.py` (raw CIQ exports -> `data/processed/`),
+`pytest` (30 tests), `market_analysis.py`, `calibrate_bnp.py`, `capital_structure.py`, `spread_and_stress.py`,
 `parameter_uncertainty.py`, `make_video.py` and `latexmk` on the paper. All
 figures read their dates, levels and annotations from the data, so dropping in
-newer exports (CIQ, `data/fred_treasury.csv`, `data/bnp_srep_requirement.csv`)
+newer exports (CIQ into `data/raw/`, `data/reference/fred_treasury.csv`,
+`data/reference/bnp_srep_requirement.csv`) and moving `VALUATION_DATE` in `src/at1_coco/data.py`
 and rerunning updates every chart and caption. Logs go to `results/*_log.txt`.
 
 Descriptive figures: [CET1 history and 5-year outlook](results/bnp_cet1_history.png),

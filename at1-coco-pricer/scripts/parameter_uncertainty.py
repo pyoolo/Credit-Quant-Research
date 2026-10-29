@@ -45,9 +45,10 @@ import pandas as pd  # noqa: E402
 from scipy.optimize import minimize, minimize_scalar  # noqa: E402
 
 from calibrate_bnp import (  # noqa: E402
-    BASE_KAPPA, BASE_SPREAD_VOL, COLOR, DATA, ONE_OFF_QUARTERS, ORDER, RES, SHORT, fit_cet1_ou, load_cet1_series,
+    BASE_KAPPA, BASE_SPREAD_VOL, COLOR, ONE_OFF_QUARTERS, ORDER, RES, SHORT, fit_cet1_ou, load_cet1_series,
     market_panel, settings,
 )
+from at1_coco import data as D  # noqa: E402
 from at1_coco.market import (  # noqa: E402
     DatedAT1, MarketState, cash_flow_profile, cont_rate, default_randoms, implied_ponv,
 )
@@ -152,7 +153,7 @@ def main():
                     ("base case", BASE_KAPPA), ("kappa high (95%)", q.loc[0.95, "kappa"])]:
         scen[name] = (float(k), sigma_given_kappa(x, t, keep, float(k)))
 
-    static = pd.read_csv(DATA / "bonds_static.csv", index_col="isin_144a")
+    static = D.bonds_static()
     bonds = {i: DatedAT1.from_row(i, static.loc[i]) for i in ORDER}
     panel = market_panel(curve="fred")
     long_run = float(panel.groupby("date")["refi"].first().mean())

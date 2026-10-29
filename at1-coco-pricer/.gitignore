@@ -1,9 +1,6 @@
-# S&P Capital IQ data is licensed: keep raw exports and CIQ-derived series local
+# S&P Capital IQ data is licensed: keep raw exports and everything built from them local
 data/raw/
-data/bond_prices.csv
-data/bnp_cet1_quarterly.csv
-data/bnp_capital_annual.csv
-data/bnp_share.csv
+data/processed/
 results/calibration_*.csv
 results/*_log.txt
 results/cet1_bootstrap.csv

@@ -34,6 +34,7 @@ import pandas as pd  # noqa: E402
 from matplotlib.animation import FFMpegWriter  # noqa: E402
 
 from at1_coco import CET1Params  # noqa: E402
+from at1_coco import data as D  # noqa: E402
 from at1_coco.processes import draw_randoms, simulate_cet1  # noqa: E402
 
 try:  # ffmpeg bundled with imageio-ffmpeg, if no system ffmpeg
@@ -57,8 +58,8 @@ BLUE, ORANGE, AQUA, YELLOW, RED = "#3987e5", "#d95926", "#199e70", "#c98500", "#
 ORDER = ["US05602XQR25", "US05602XQS08", "US05602XQQ42"]
 SHORT = {"US05602XQR25": "6.875% NC33", "US05602XQS08": "7.20% NC36", "US05602XQQ42": "7.45% NC35"}
 BOND_COLOR = {"US05602XQR25": BLUE, "US05602XQS08": ORANGE, "US05602XQQ42": AQUA}
-COMP_COLOR = [BLUE, ORANGE, AQUA, YELLOW]
-COMPS = ["PONV / tail / liquidity", "MDA coupon cuts", "conversion", "extension"]
+COMP_COLOR = ["#1f4e8c", BLUE, ORANGE, AQUA, YELLOW]
+COMPS = ["resolution risk (priced in T2)", "AT1-specific premium", "MDA coupon cuts", "conversion", "extension"]
 
 # filled from the data by load(): nothing below is typed by hand
 MDA = TRIGGER = CET1_TODAY = KAPPA = SIGMA = SPREAD_TODAY = None
@@ -93,12 +94,12 @@ def window(p: float, a: float, b: float) -> float:
 def load():
     global MDA, TRIGGER, CET1_TODAY, KAPPA, SIGMA, SPREAD_TODAY, AS_OF
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from calibrate_bnp import DATA, base_cet1_dynamics, market_panel, settings
+    from calibrate_bnp import base_cet1_dynamics, market_panel, settings
 
     KAPPA, SIGMA = base_cet1_dynamics()                      # same base case as the analysis
     ms = settings(KAPPA, SIGMA, 0.01, 0.03)
     MDA = ms.mda_threshold + ms.combined_buffer
-    TRIGGER = float(pd.read_csv(DATA / "bonds_static.csv")["trigger_level_pct"].iloc[0])
+    TRIGGER = float(D.bonds_static()["trigger_level_pct"].iloc[0])
     panel = market_panel(curve="fred")
     last = panel[panel["date"] == panel["date"].max()]
     AS_OF, CET1_TODAY, SPREAD_TODAY = last["date"].iloc[0], float(last["cet1"].iloc[0]), float(last["refi"].iloc[0])
@@ -171,14 +172,14 @@ def scene_fan(paths, times, bands):
 
 def scene_breakdown(tab, total):
     def draw(fig, p, a):
-        share = tab.loc["PONV / tail / liquidity"].sum() / total.sum()
+        share = tab.loc["resolution risk (priced in T2)"].sum() / total.sum()
         ax = frame(fig, "What the spread pays for",
-                   f"Yield-to-call spread over Treasuries, bp · {share:.0%} is PONV / tail premium",
+                   f"Yield-to-call spread over Treasuries, bp · {share:.0%} is bank resolution risk priced in BNP's T2",
                    a, rect=(0.22, 0.22, 0.7, 0.6))
         y = np.arange(len(ORDER))[::-1] * 1.25
         left = np.zeros(len(ORDER))
         for j, comp in enumerate(COMPS):
-            g = window(p, 0.05 + 0.16 * j, 0.25 + 0.16 * j)
+            g = window(p, 0.05 + 0.13 * j, 0.22 + 0.13 * j)
             v = tab.loc[comp].values * g
             if g > 0:
                 ax.barh(y, v, left=left, color=COMP_COLOR[j], height=0.72, edgecolor=BG, lw=2.5,
