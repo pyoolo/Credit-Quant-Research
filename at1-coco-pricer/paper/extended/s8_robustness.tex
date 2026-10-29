@@ -1,0 +1,149 @@
+%======================================================================
+\section{Robustness}\label{sec:robust}
+%======================================================================
+
+This section asks whether the central result, the split of the AT1 spread into about
+$180$bp priced in Tier~2 and $50$bp of AT1-specific premium, survives three objections a
+practitioner would raise: that the call rule is unrealistic, that the attribution depends on
+the order of features, and that a single flat resolution hazard is too crude for a perpetual.
+All computations are on the valuation date, on the same random numbers as the base case.
+
+\subsection{Reputational calls}
+
+The base call rule \eqref{eq:call} with $\delta=0$ calls only when refinancing is cheaper.
+European national champions have almost always called their AT1s at the first opportunity,
+and market participants quote call probabilities well above those of
+Table~\ref{tab:callext}. We introduce a reputational tolerance: the issuer also calls when its
+reset margin is up to $\delta$ \emph{below} the new-issue spread. For each $\delta$ we
+recalibrate the hazard of each bond.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lcccc}
+\toprule
+Tolerance $\delta$ (bp) & 0 & 25 & 50 & 100 \\
+\midrule
+$\Pr(\text{called at }T_1)$: 6.875\% NC33 & 49\% & 57\% & 65\% & 77\% \\
+\phantom{$\Pr(\text{called at }T_1)$:} 7.20\% NC36 & 52\% & 60\% & 67\% & 79\% \\
+\phantom{$\Pr(\text{called at }T_1)$:} 7.45\% NC35 & 58\% & 66\% & 72\% & 81\% \\
+Implied hazard, 6.875\% (\%/yr) & 2.21 & 2.22 & 2.23 & 2.25 \\
+Implied hazard, 7.20\% (\%/yr) & 2.18 & 2.19 & 2.20 & 2.21 \\
+Implied hazard, 7.45\% (\%/yr) & 2.19 & 2.19 & 2.19 & 2.19 \\
+Extension component, 6.875\% (bp) & 15 & 14 & 13 & 11 \\
+Extension component, 7.20\% (bp) & 9 & 9 & 8 & 7 \\
+Extension component, 7.45\% (bp) & 6 & 6 & 6 & 6 \\
+Tier~2 share of the AT1 hazard & 78\% & 78\% & 78\% & 78\% \\
+\bottomrule
+\end{tabular}
+\caption{Reputational call tolerance. The extension component is the yield-to-call spread of
+the model price minus that of the same bond with a certain call at $T_1$.}
+\label{tab:reputation}
+\end{table}
+
+A tolerance of $100$bp raises the probability of a call at the first reset to $77$--$81\%$,
+the range practitioners quote, and lowers the extension component of the low-margin bond
+from $15$ to $11$bp. The implied hazard moves by at most $4$bp, and the Tier~2 share of the
+hazard does not move. The reason is that the market price pins down the total value of the
+bond: a more generous call rule raises the value of the call leg slightly, and the hazard
+adjusts to absorb it. The extension risk of the low-margin bond, and its negative convexity,
+are therefore partly a feature of the economic call rule, while the split between Tier~2-priced
+and AT1-specific risk is not.
+
+\subsection{Order of attribution}
+
+Table~\ref{tab:order} reports four attributions of the spread for each bond: the base order
+(R, S, M, C, E), the nested Shapley value of Section~\ref{sec:attribution}, the full Shapley
+value over all $120$ orders, and the reverse order (E, C, M, S, R).
+
+\begin{table}[H]
+\centering\small
+\begin{tabular}{llcccc}
+\toprule
+Bond & Component & Base order & Nested Shapley & Full Shapley & Reverse order \\
+\midrule
+\multirow{5}{*}{6.875\% NC33} & Priced in Tier~2 & 180.7 & 180.8 & 221.1 & 259.1 \\
+ & AT1-specific & 51.6 & 51.6 & 62.8 & 77.0 \\
+ & MDA & 27.3 & 36.1 & 35.5 & 43.3 \\
+ & Conversion & 4.1 & 5.5 & 6.4 & 11.7 \\
+ & Extension & 14.7 & 4.5 & $-47.3$ & $-112.6$ \\
+\midrule
+\multirow{5}{*}{7.20\% NC36} & Priced in Tier~2 & 180.8 & 180.9 & 206.9 & 231.4 \\
+ & AT1-specific & 48.8 & 48.8 & 55.7 & 64.4 \\
+ & MDA & 30.6 & 36.0 & 35.1 & 39.3 \\
+ & Conversion & 4.6 & 6.0 & 6.8 & 11.0 \\
+ & Extension & 9.1 & 2.4 & $-30.4$ & $-72.0$ \\
+\midrule
+\multirow{5}{*}{7.45\% NC35} & Priced in Tier~2 & 180.0 & 180.0 & 203.6 & 225.9 \\
+ & AT1-specific & 48.9 & 48.8 & 55.1 & 62.9 \\
+ & MDA & 30.4 & 35.8 & 35.0 & 39.2 \\
+ & Conversion & 4.0 & 5.3 & 6.1 & 10.1 \\
+ & Extension & 6.0 & $-0.6$ & $-30.4$ & $-68.8$ \\
+\bottomrule
+\end{tabular}
+\caption{Attribution of the yield-to-call spread (bp) under four methods. Totals are
+$278.5$, $274.0$ and $269.3$bp in every column.}
+\label{tab:order}
+\end{table}
+
+Three conclusions follow.
+
+\emph{First}, the split of the hazard block is order-free. In every attribution that prices
+the hazard before the contract features, the base order and the nested Shapley value, the
+Tier~2-priced and AT1-specific components agree to within $0.2$bp. This is the near-linearity
+of Proposition~\ref{prop:hazardsplit}: on the relevant range the yield-to-call spread is
+almost linear in the hazard level, so it does not matter in which order $\lres$ and $\lspec$
+are switched on.
+
+\emph{Second}, the attribution among the contract features is order-dependent. Their total
+is the same in the base order and in the nested value ($40$--$46$bp depending on the bond),
+but its split is not: symmetric treatment raises the MDA component to about $36$bp and
+reduces extension to a few basis points. The two features interact through the capital
+condition of the call rule. The states in which the call is blocked because CET1 is below the
+threshold are the states in which the MDA cuts coupons; once the MDA is priced, the
+cash flows of the bond in those states are already reduced, so the incremental cost of not
+being called is smaller, and conversely. The honest statement is that the contract features
+cost $40$--$46$bp, of which MDA is $27$--$36$bp, conversion $4$--$6$bp and extension between
+$-1$ and $15$bp.
+
+\emph{Third}, orders that switch extension on before the hazard produce economically
+meaningless results. Without any hazard, the bond is risk-free, and not calling a risk-free
+bond that pays its reset margin over Treasuries is a gift to the investor: extension takes a
+large negative value ($-69$ to $-113$bp in the reverse order) and the hazard components absorb
+the difference. This is the inconsistency the state-dependent hazard is designed to avoid
+(Section~\ref{sec:hazard}); it shows why the full Shapley value, which averages over such orders,
+is the wrong benchmark for AT1 attribution.
+
+\subsection{Term structure of the resolution hazard}
+
+A single flat $\lres$, calibrated to a bond with a 2034 call, is applied to AT1 cash flows
+that run for decades if the bond is extended. With the two Tier~2 bonds we bootstrap a
+two-piece resolution hazard as in Section~\ref{sec:piecewise}.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+ & 6.875\% NC33 & 7.20\% NC36 & 7.45\% NC35 \\
+\midrule
+$\lambda_1$ to August 2030 (\%/yr) & 1.40 & 1.40 & 1.40 \\
+$\lambda_2$ after August 2030 (\%/yr) & 2.10 & 2.10 & 2.10 \\
+Flat $\lres$ (\%/yr) & 1.72 & 1.72 & 1.72 \\
+$\lspec$, flat $\lres$ (\%/yr) & 0.49 & 0.46 & 0.47 \\
+$\lspec$, two-piece $\lres$ (\%/yr) & 0.42 & 0.36 & 0.39 \\
+Tier~2-priced component, flat (bp) & 180.7 & 180.8 & 180.0 \\
+Tier~2-priced component, two-piece (bp) & 176.4 & 184.6 & 181.2 \\
+\bottomrule
+\end{tabular}
+\caption{Two-piece resolution hazard bootstrapped from the Tier~2 2035NC30 (call August 2030)
+and the Tier~2 2035NC34 (call November 2034), recovery $20\%$.}
+\label{tab:termstructure}
+\end{table}
+
+The resolution hazard is upward sloping: $1.40\%$ a year to 2030 and $2.10\%$ after. With
+the steeper curve, more of each AT1's hazard is attributed to what Tier~2 prices, and the
+AT1-specific hazard falls from $0.47\%$ to $0.39\%$ on average. The Tier~2-priced component
+of the spread moves by less than $5$bp, in different directions for different bonds
+depending on the timing of their cash flows. A term structure therefore strengthens, rather
+than weakens, the conclusion that most of the AT1 spread is priced in Tier~2. A caveat
+applies to the short Tier~2: it trades well below par with a reset in 2030, and its price
+may contain a convexity or tax effect that a bullet-to-call treatment ignores.

@@ -1,0 +1,112 @@
+%======================================================================
+\section{Attributing the spread}\label{sec:attribution}
+%======================================================================
+
+The market quotes AT1 bonds by their yield to the first call over the matching
+Treasury. We want to say how much of that spread pays for each risk. This section
+defines the attribution and discusses its dependence on the order in which risks are
+switched on.
+
+\subsection{Features, prices and yields}
+
+Index the risk features of the bond by the set
+\[
+  \mathcal N=\{\mathrm R,\mathrm S,\mathrm M,\mathrm C,\mathrm E\},
+\]
+standing for resolution hazard ($\lres$), AT1-specific hazard ($\lspec$), MDA coupon
+restriction, conversion at the trigger, and extension (the economic call rule
+\eqref{eq:call} instead of a certain call at $T_1$). For any subset $K\subseteq\mathcal N$
+let $V(K)$ be the dirty price with exactly the features in $K$ switched on, computed on
+the fixed set of paths:
+\begin{itemize}
+  \item hazard $(\lres\1_{\mathrm R\in K}+\lspec\1_{\mathrm S\in K})\,s^+_t/s_0$;
+  \item coupons scaled by $\phi$ if $\mathrm M\in K$, paid in full otherwise;
+  \item conversion at $\tau_m$ if $\mathrm C\in K$, no trigger otherwise;
+  \item call by \eqref{eq:call} if $\mathrm E\in K$, certain call at $T_1$ otherwise.
+\end{itemize}
+$V(\emptyset)$ is the price of a risk-free bullet to $T_1$, and $V(\mathcal N)$ is the
+model price, equal to the market price by calibration.
+
+Let $y(V)$ be the semi-annual yield to the first call implied by a dirty price $V$,
+treating the bond as a bullet to $T_1$, and define the spread of a subset as
+$v(K)=y(V(K))-y(V(\emptyset))$. Because $V(\emptyset)$ is discounted at the risk-free
+rate, $y(V(\emptyset))$ is the Treasury yield and $v(\mathcal N)$ is the market
+yield-to-call spread. The map $V\mapsto y(V)$ is strictly decreasing, so $v$ is
+increasing in risk.
+
+\subsection{Sequential attribution and its order dependence}
+
+Given an order $\pi=(\pi_1,\dots,\pi_5)$ of the features, the sequential attribution is
+\begin{equation}\label{eq:sequential}
+  \varphi^\pi_{\pi_k}=v(\{\pi_1,\dots,\pi_k\})-v(\{\pi_1,\dots,\pi_{k-1}\}),
+\end{equation}
+which telescopes to $\sum_k\varphi^\pi_{\pi_k}=v(\mathcal N)$: the components add up
+exactly to the market spread. The attribution depends on $\pi$ whenever the features
+interact, that is whenever $v$ is not additive. Interactions are pervasive here. The MDA
+cuts coupons that would otherwise be paid only if the bond survives, so its cost depends on
+the hazard; the value of the call option depends on the discount rate of the extended
+cash flows, so its cost depends on the hazard and on the MDA; and the yield transformation
+is non-linear.
+
+The base attribution of the short note uses the order $(\mathrm R,\mathrm S,\mathrm M,\mathrm C,\mathrm E)$:
+the hazard first, so that every contract feature is valued with risky discounting, and
+extension last, so that the call is valued with every other feature in place.
+
+\subsection{Shapley values}
+
+The Shapley value \citep{Shapley1953} averages the sequential attribution over all
+$|\mathcal N|!=120$ orders:
+\begin{equation}\label{eq:shapley}
+  \varphi^{\mathrm{Sh}}_j=\sum_{K\subseteq\mathcal N\setminus\{j\}}
+  \frac{|K|!\,(|\mathcal N|-|K|-1)!}{|\mathcal N|!}\bigl(v(K\cup\{j\})-v(K)\bigr).
+\end{equation}
+It is the unique attribution satisfying efficiency ($\sum_j\varphi_j=v(\mathcal N)$),
+symmetry (interchangeable features receive the same value), the null-player property
+and additivity. It needs the $2^5=32$ values $v(K)$, which on a fixed set of paths require
+only eight cash-flow profiles per bond (one for each combination of M, C and E): the two
+hazard features enter through the discount exponent and are evaluated analytically.
+
+The full Shapley value treats all orders as equally meaningful. For AT1 bonds they are
+not. Orders in which extension is switched on before any hazard value the issuer's option
+on a risk-free bond. When a risk-free bond pays its reset margin $m$ over Treasuries, not
+calling it is a gift to the investor, so these orders assign extension a large negative
+value; this is precisely the inconsistency that the state-dependent hazard of
+Section~\ref{sec:hazard} is designed to avoid. We therefore also compute a Shapley value
+within blocks.
+
+\begin{definition}[Nested Shapley value]
+Partition the features into the hazard block $\mathcal H=\{\mathrm R,\mathrm S\}$ and the
+contract block $\mathcal K=\{\mathrm M,\mathrm C,\mathrm E\}$. The nested value is the
+Shapley value of the game $v$ restricted to $\mathcal H$ for $j\in\mathcal H$, and the
+Shapley value of the game $K\mapsto v(\mathcal H\cup K)-v(\mathcal H)$ on $\mathcal K$ for
+$j\in\mathcal K$.
+\end{definition}
+
+The nested value is symmetric within each block and enters the hazard block first. It is
+related to the value for games with a priori unions of \citet{Owen1977}, which would also
+average over the order of the two blocks; we fix the order of the blocks for the economic
+reason just given. By construction it is efficient: the hazard block receives
+$v(\mathcal H)$ and the contract block $v(\mathcal N)-v(\mathcal H)$.
+
+\begin{proposition}[Split of the hazard block]\label{prop:hazardsplit}
+Within the hazard block, the nested value is
+\[
+  \varphi_{\mathrm R}=\tfrac12\bigl[v(\{\mathrm R\})+v(\mathcal H)-v(\{\mathrm S\})\bigr],\qquad
+  \varphi_{\mathrm S}=\tfrac12\bigl[v(\{\mathrm S\})+v(\mathcal H)-v(\{\mathrm R\})\bigr].
+\]
+If the spread were linear in the hazard level on the relevant range,
+$v(\{\mathrm R\})+v(\{\mathrm S\})=v(\mathcal H)$ and the nested value would coincide with
+the sequential attribution in either order, giving
+$\varphi_{\mathrm R}/(\varphi_{\mathrm R}+\varphi_{\mathrm S})=\lres/\lambda$.
+\end{proposition}
+
+\begin{proof}
+The first statement is \eqref{eq:shapley} for two players. Under linearity
+$v(\{\mathrm R\})=\lres\,g$ and $v(\{\mathrm S\})=\lspec\,g$ for some slope $g$, and both
+orders give the same increments.
+\end{proof}
+
+For BNP the yield-to-call spread is very close to linear in the hazard on the relevant
+range, so the split of the hazard block is effectively order-free: the nested value and
+the base order agree to within $0.2$bp (Section~\ref{sec:robust}). The order matters for the
+contract block, and there the attribution should be reported as a range.

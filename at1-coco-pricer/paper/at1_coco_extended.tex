@@ -1,0 +1,102 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,mathtools,bm}
+\usepackage{booktabs,graphicx,float,caption,subcaption,array,multirow}
+\usepackage[authoryear,round]{natbib}
+\usepackage[hidelinks]{hyperref}
+\usepackage{parskip}
+\usepackage{enumitem}
+\setlist{itemsep=2pt,topsep=4pt}
+
+\graphicspath{{../results/}}
+\captionsetup{font=small,labelfont=bf}
+
+\theoremstyle{plain}
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{lemma}[proposition]{Lemma}
+\newtheorem{corollary}[proposition]{Corollary}
+\newtheorem{theorem}[proposition]{Theorem}
+\theoremstyle{definition}
+\newtheorem{definition}[proposition]{Definition}
+\newtheorem{assumption}[proposition]{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}[proposition]{Remark}
+
+\newcommand{\E}{\mathbb{E}}
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\1}{\mathbf{1}}
+\newcommand{\ctrig}{c_{\mathrm{trig}}}
+\newcommand{\cmda}{\bar c}
+\newcommand{\lres}{\lambda_{\mathrm{res}}}
+\newcommand{\lspec}{\lambda_{\mathrm{spec}}}
+\newcommand{\G}{\mathcal{G}}
+\newcommand{\F}{\mathcal{F}}
+\newcommand{\dd}{\,\mathrm{d}}
+
+\title{\textbf{Pricing Additional Tier~1 Bonds as Claims on Bank Capital}\\[6pt]
+\large A capital-ratio model with a stochastic refinancing spread, a Tier~2 anchor\\
+for the write-down hazard, and an application to BNP Paribas}
+\author{Paolo Mastrogiacomo\thanks{Credit-Quant-Research, \texttt{at1-coco-pricer}.
+Code, tests and the scripts that produce every number and figure in this paper are in the
+repository. Market data are S\&P Capital IQ evaluated prices and are not redistributed.
+Academic work, not investment advice.}}
+\date{October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+\noindent
+Additional Tier~1 (AT1) bonds are perpetual, deeply subordinated bank bonds whose
+coupons, principal and redemption all depend on the issuer's capital. We model them
+as claims on the Common Equity Tier~1 (CET1) ratio, which follows a mean-reverting
+jump-diffusion, together with a correlated stochastic refinancing spread that drives
+both the issuer's call decision and a doubly-stochastic write-down hazard. Coupons are
+restricted by the Maximum Distributable Amount (MDA) rule along a time-varying
+regulatory threshold, principal converts at a contractual trigger, and the issuer calls
+only when refinancing is cheaper. Conditioning on the state paths makes the price an
+explicit, smooth, strictly decreasing and convex function of the hazard level, so the
+market-implied hazard is unique, is solved without simulation noise in the hazard
+direction, and every comparative static is computed with common random numbers.
+We then price the issuer's Tier~2 and senior non-preferred bonds on the same simulated
+state. Because the creditor hierarchy makes Tier~2 exposed to the same resolution event
+as AT1, this splits the AT1 hazard into a part that Tier~2 also prices and an
+AT1-specific premium. Calibrated to BNP Paribas's three USD AT1s on 25 September 2026,
+the bonds imply a hazard of $2.19\%$ a year, equal across bonds to within the
+bid--offer; $1.72\%$ is priced in BNP's Tier~2 and $0.47\%$ is specific to the AT1.
+Of the $\approx 275$bp spread, about $180$bp is priced in Tier~2, $50$bp is an
+AT1-specific premium (a lower bound) and $40$--$46$bp are contract features: MDA coupon
+cuts, conversion and extension. The split is robust to a reputational call rule, to the
+order of attribution (Shapley values within blocks) and to a term structure of the
+resolution hazard. Prices are flat in capital above the MDA threshold and steep at it,
+so the risk-relevant distance is to the MDA threshold, not to the trigger. The speed of
+capital mean reversion is the weakest input and scales the capital stress results by a
+factor of five across its bootstrap interval.
+
+\medskip\noindent
+\textbf{Keywords:} contingent convertibles, AT1, CoCos, bank capital, MDA, point of
+non-viability, Cox processes, conditional Monte Carlo, Shapley value.\\
+\textbf{JEL:} G12, G13, G21, G28.
+\end{abstract}
+
+\newpage
+\tableofcontents
+\newpage
+
+\input{extended/s1_introduction}
+\input{extended/s2_institutions}
+\input{extended/s3_model}
+\input{extended/s4_valuation}
+\input{extended/s5_attribution}
+\input{extended/s6_calibration}
+\input{extended/s7_results}
+\input{extended/s8_robustness}
+\input{extended/s9_discussion}
+
+\appendix
+\input{extended/a_appendix}
+
+\input{extended/references}
+
+\end{document}

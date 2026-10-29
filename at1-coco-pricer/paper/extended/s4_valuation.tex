@@ -1,0 +1,214 @@
+%======================================================================
+\section{Valuation}\label{sec:valuation}
+%======================================================================
+
+\subsection{The pricing equation}
+
+Let $r$ be the flat, continuously compounded risk-free rate used for discounting, $F$ the
+face value, $f$ the coupon frequency and $t_1<t_2<\dots$ the coupon dates. The scheduled
+coupon rate is $c(t_i)=c_0$ up to and including the first reset $T_1$ and
+$c(t_i)=y^{\mathrm{ref}}+m$ after it, where $y^{\mathrm{ref}}$ is the five-year reference
+rate. A coupon is paid if the bond has not been converted, called or written down, scaled
+by the MDA fraction. The principal is repaid at the call, converted at the trigger, or
+lost at PONV. The dirty price at time 0 is
+\begin{equation}\label{eq:price}
+\begin{split}
+  V_0=\E\Biggl[\,&\sum_{t_i\le H}\1_{\{t_i<\tau_m,\ t_i\le\tau_c,\ t_i<\tau_P\}}
+  \,\phi(C_{t_i},t_i)\,\frac{c(t_i)F}{f}\,e^{-rt_i}
+  + \1_{\{\tau_c<\tau_m\wedge\tau_P,\ \tau_c\le H\}}\,F\,e^{-r\tau_c}\\
+  &+ \1_{\{\tau_m<\tau_c\wedge\tau_P,\ \tau_m\le H\}}\,R_{\mathrm{conv}}F\,e^{-r\tau_m}
+  + \1_{\{\tau_c\wedge\tau_m\wedge\tau_P>H\}}\,T_H\,e^{-rH}\Biggr],
+\end{split}
+\end{equation}
+where $H$ is the simulation horizon and $T_H$ the value at $H$ of a bond still alive,
+\begin{equation}\label{eq:tail}
+  T_H = \frac{(y^{\mathrm{ref}}+m)F}{r+\lambda\, s_H^+/s_0}.
+\end{equation}
+The tail is the value of a perpetuity paying the reset coupon continuously, discounted
+at the risk-free rate plus the hazard frozen at its level at $H$. With $H=40$ years and
+$r\approx5\%$, the tail is discounted by $e^{-rH}\approx0.13$ and weighted by the
+probability of survival without call to year 40, which is below $3\%$ in the base case
+(Table~\ref{tab:callext}); its contribution to the price is a few hundredths of a point.
+
+\subsection{Conditional Monte Carlo}
+
+The write-down time enters \eqref{eq:price} only through the indicators
+$\1_{\{t<\tau_P\}}$. Every other quantity is a functional of the state paths.
+
+\begin{theorem}[Conditional pricing formula]\label{thm:cmc}
+Let $\mathrm{CF}_i$ be the coupon cash flows of \eqref{eq:price} with the indicator of
+$\tau_P$ removed, and let $\mathrm{CF}_{\mathrm{end}}$ and $T_{\mathrm{end}}$ be the
+redemption, conversion or tail payment and its date on each path. Then
+\begin{equation}\label{eq:cmc}
+  V_0(\lambda)=\E\Biggl[\,\sum_{i}\mathrm{CF}_i\,e^{-rt_i-\lambda I_{t_i}}
+  + \mathrm{CF}_{\mathrm{end}}\,e^{-rT_{\mathrm{end}}-\lambda I_{T_{\mathrm{end}}}}\Biggr].
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+All of $\mathrm{CF}_i$, $\mathrm{CF}_{\mathrm{end}}$, $T_{\mathrm{end}}$, $\tau_m$ and
+$\tau_c$ are $\G_\infty$-measurable. By the tower property,
+$\E[X\1_{\{t<\tau_P\}}]=\E[X\,\Q(\tau_P>t\mid\G_\infty)]=\E[Xe^{-\lambda I_t}]$ for any
+$\G_\infty$-measurable integrable $X$, by \eqref{eq:survat1}. Apply this to each term of
+\eqref{eq:price}. In the tail term the event $\{\tau_P>H\}$ contributes $e^{-\lambda I_H}$,
+and the value of the perpetuity after $H$ is given by \eqref{eq:tail}.
+\end{proof}
+
+The estimator replaces the simulated indicator by its conditional expectation. Two
+consequences follow.
+
+\begin{proposition}[Variance reduction]\label{prop:var}
+Let $X$ be the discounted payoff of \eqref{eq:price} on one path, with $\tau_P$
+simulated, and $Y=\E[X\mid\G_\infty]$ the integrand of \eqref{eq:cmc}. Then
+$\E[Y]=\E[X]$ and $\operatorname{Var}(Y)=\operatorname{Var}(X)-\E[\operatorname{Var}(X\mid\G_\infty)]\le\operatorname{Var}(X)$,
+with equality only if $X$ is $\G_\infty$-measurable.
+\end{proposition}
+
+\begin{proof}
+This is the law of total variance.
+\end{proof}
+
+\begin{proposition}[Shape of the price in the hazard]\label{prop:shape}
+On any fixed set of paths, and in expectation, the map $\lambda\mapsto V_0(\lambda)$ on
+$[0,\infty)$ is infinitely differentiable, strictly decreasing and strictly convex, with
+\begin{equation}\label{eq:dv}
+  V_0'(\lambda) = -\E\Bigl[\sum_i\mathrm{CF}_i\,I_{t_i}e^{-rt_i-\lambda I_{t_i}}
+  + \mathrm{CF}_{\mathrm{end}}\,I_{T_{\mathrm{end}}}e^{-rT_{\mathrm{end}}-\lambda I_{T_{\mathrm{end}}}}\Bigr]
+  + \text{(tail term)} <0,
+\end{equation}
+$V_0(\lambda)\to0$ as $\lambda\to\infty$. Consequently, for any market price
+$P\in(0,V_0(0))$ the implied hazard $\lambda^\star$ solving $V_0(\lambda^\star)=P$ exists
+and is unique, and any bracketing method on $[0,\bar\lambda]$ with
+$V_0(\bar\lambda)<P$ converges to it.
+\end{proposition}
+
+\begin{proof}
+Each summand has the form $a\,e^{-\lambda b}$ with $a\ge0$ and $b=I_t>0$ for $t>0$. The
+driver starts at $s_0/s_0=1$ (when CET1 is above the threshold) and is continuous, so
+$I_t>0$ for every $t>0$ on every path. Each summand is therefore smooth, decreasing and
+convex in $\lambda$, strictly so when $a>0$. The tail summand is the product of
+$(y^{\mathrm{ref}}+m)F/(r+\lambda d)$ and $e^{-\lambda I_H}$ with $d=s_H^+/s_0\ge0$; both
+factors are positive, decreasing and convex, and for two such functions
+$(gh)''=g''h+2g'h'+gh''\ge0$ since $g'h'\ge0$. Sums and averages preserve these
+properties, and at least one coupon is positive with positive probability, which gives
+strictness. Every summand vanishes as $\lambda\to\infty$; dominated convergence gives the
+limit. Existence and uniqueness of the root follow from continuity and strict
+monotonicity.
+\end{proof}
+
+In practice we solve $V_0(\lambda)=P^{\mathrm{clean}}+\mathrm{AI}$ with Brent's method
+\citep{Brent1973} on $[0,1]$. Because the path-wise cash flows and the integrated
+drivers are stored once, each evaluation of $V_0(\lambda)$ is a vectorised sum, and the
+root costs a few milliseconds. Proposition~\ref{prop:shape} also gives the price
+sensitivity to the hazard, which we use in Section~\ref{sec:calibration} to translate
+hazard differences into price units: for the three AT1s $|V_0'|$ is $0.077$--$0.084$
+points per basis point of hazard.
+
+\subsection{Monte Carlo error of the implied hazard}
+
+Let $\hat V_n(\lambda)$ be the sample mean of $n$ paths. By the delta method, the
+standard error of the implied hazard is approximately
+\begin{equation}\label{eq:sehazard}
+  \operatorname{se}(\hat\lambda^\star)\approx\frac{\operatorname{se}\bigl(\hat V_n(\lambda^\star)\bigr)}{\bigl|V_0'(\lambda^\star)\bigr|}.
+\end{equation}
+With $n=20{,}000$ paths, the standard error of the dirty price is $0.05$--$0.06$ points
+and that of the implied hazard is $0.67$bp for all three bonds
+(Appendix~\ref{app:numerics}). Because the three bonds are priced on the same paths, their
+Monte Carlo errors are strongly positively correlated, and the cross-bond dispersion of
+the implied hazards is much more precise than each hazard: across independent seeds and
+path counts from $5{,}000$ to $40{,}000$, the dispersion stays within $2.3$--$2.9$bp.
+
+\subsection{Tier~2 and senior bonds}\label{sec:t2}
+
+A Tier~2 or senior non-preferred note with coupons $c_i$ to a call date $T$ treated as
+certain, recovery $R$ at resolution and resolution hazard $\lres s_t^+/s_0$ pays its
+coupons and principal if $\tau_{\mathrm{res}}>T$, and $RF$ at $\tau_{\mathrm{res}}$ if
+$\tau_{\mathrm{res}}\le T$.
+
+\begin{proposition}[Tier~2 price]\label{prop:t2}
+With recovery paid at the resolution time,
+\begin{equation}\label{eq:t2cont}
+  B_0=\E\Biggl[\sum_{t_i\le T}c_iF\,e^{-rt_i-\lres I_{t_i}}+F\,e^{-rT-\lres I_T}
+  + RF\int_0^Te^{-ru}\,\lres\frac{s_u^+}{s_0}\,e^{-\lres I_u}\dd u\Biggr].
+\end{equation}
+On a grid $0=u_0<u_1<\dots<u_N=T$ with recovery paid at the end of the step in which
+resolution occurs, the recovery leg is exactly
+\begin{equation}\label{eq:t2grid}
+  RF\sum_{n=0}^{N-1}\Bigl(e^{-\lres I_{u_n}}-e^{-\lres I_{u_{n+1}}}\Bigr)e^{-ru_{n+1}} ,
+\end{equation}
+and the difference from \eqref{eq:t2cont} is bounded by $RF\bigl(1-e^{-r\Delta}\bigr)$.
+\end{proposition}
+
+\begin{proof}
+The survival terms follow as in Theorem~\ref{thm:cmc} with \eqref{eq:survt2}. For the
+recovery leg, conditionally on $\G_\infty$ the law of $\tau_{\mathrm{res}}$ has density
+$\lres(s_u^+/s_0)e^{-\lres I_u}$, so
+$\E[RFe^{-r\tau_{\mathrm{res}}}\1_{\{\tau_{\mathrm{res}}\le T\}}\mid\G_\infty]$ is the
+integral in \eqref{eq:t2cont}. On the grid, the conditional probability of resolution in
+$(u_n,u_{n+1}]$ is $e^{-\lres I_{u_n}}-e^{-\lres I_{u_{n+1}}}$, which gives
+\eqref{eq:t2grid}. Paying at $u_{n+1}$ instead of at the resolution time within the step
+changes the discount factor by at most a factor $e^{-r\Delta}$, and the total probability
+of resolution is at most one.
+\end{proof}
+
+With a monthly grid and $r\approx5\%$ the bound is $0.4\%$ of the recovered amount, that
+is about $0.01$ points for a recovery of $20\%$ and a resolution probability of about
+$13\%$ to the call. The price \eqref{eq:t2grid} is again smooth and strictly
+decreasing in $\lres$ for $R<1$, and the implied $\lres$ is unique. Crucially, the Tier~2
+is priced on the \emph{same} paths and the same driver $I_t$ as the AT1s, so that $\lres$
+and $\lambda$ are directly comparable.
+
+\subsection{A term structure for the resolution hazard}\label{sec:piecewise}
+
+A single level $\lres$ is calibrated to one Tier~2 bond. With two bonds of different
+maturities we can bootstrap a piecewise-constant level,
+$\lres(t)=\lambda_1\1\{t\le T^\ast\}+\lambda_2\1\{t>T^\ast\}$, where $T^\ast$ is the call of
+the shorter bond. The integrated hazard becomes
+$\int_0^t\lres(u)\frac{s_u^+}{s_0}\dd u=\lambda_1I_{t\wedge T^\ast}+\lambda_2\bigl(I_t-I_{T^\ast}\bigr)^+$.
+
+\begin{lemma}\label{lem:piecewise}
+Because $I$ is non-decreasing, $I_{t\wedge T^\ast}=\min(I_t,I_{T^\ast})$ and
+$(I_t-I_{T^\ast})^+=\max(I_t-I_{T^\ast},0)$. Hence every price under the piecewise hazard
+is computed from the stored values $I_{t_i}$ together with the single path-wise value
+$I_{T^\ast}$.
+\end{lemma}
+
+The bootstrap is sequential: $\lambda_1$ is implied from the shorter bond, whose cash
+flows end at $T^\ast$; $\lambda_2$ is then implied from the longer bond with $\lambda_1$
+fixed; finally the AT1-specific level is implied from each AT1 with the piecewise
+resolution hazard in place. Each step is a one-dimensional root with the monotonicity of
+Proposition~\ref{prop:shape}.
+
+\subsection{Discretisation}
+
+The state is simulated on a monthly grid ($\Delta=1/12$) over $H=40$ years with
+$20{,}000$ paths. The spread uses its exact Gaussian transition,
+\begin{equation}
+  S_{n+1}=\bar s+(S_n-\bar s)e^{-a\Delta}+\eta\sqrt{\frac{1-e^{-2a\Delta}}{2a}}
+  \Bigl(\rho Z^C_n+\sqrt{1-\rho^2}\,Z^\perp_n\Bigr),
+\end{equation}
+where $Z^C_n$ is the normal of the CET1 step and $Z^\perp_n$ an independent normal. The
+CET1 ratio uses an Euler step for the diffusion with a Bernoulli jump of probability
+$1-e^{-\lambda_J\Delta}$ and lognormal size. The integrated driver uses the left-point rule,
+$I_{n+1}=I_n+\Delta\,s^+_n/s_0$.
+
+Three discretisation effects deserve comment. First, the Euler scheme for a linear SDE has
+weak order one; with $\kappa\Delta\approx0.03$ the bias in the transition mean is of order
+$(\kappa\Delta)^2/2\approx5\times10^{-4}$ in relative terms. Second, the trigger is
+monitored only at grid dates, which underestimates the probability of crossing between
+dates. \citet{BroadieGlassermanKou1997} show that, for a Brownian motion with volatility
+$\sigma$, discrete monitoring is approximately equivalent to shifting the barrier away by
+$0.5826\,\sigma\sqrt{\Delta}$; here the shift is $0.08$pp of CET1 against a distance of
+$7.8$pp to the trigger, and the conversion component of the spread is only $4$bp, so the
+effect is negligible. Third, events on the grid are read at grid dates, while coupons are
+discounted at their exact dates. Halving the step to fortnightly changes the implied
+hazards by at most $1.6$bp (Appendix~\ref{app:numerics}).
+
+\subsection{Common random numbers}
+
+All primitive random numbers are drawn once and reused across bonds, scenarios, bumps
+and feature switches. A difference between two prices computed on the same paths
+(a Greek, a stress P\&L, a component of the spread decomposition, the dispersion of the
+implied hazards across bonds) therefore carries no Monte Carlo noise of its own beyond
+the second-order effect of the change on the path-wise payoffs. This is what makes the
+attribution of Section~\ref{sec:attribution} exact on a given set of paths.

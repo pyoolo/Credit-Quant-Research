@@ -1,0 +1,117 @@
+%======================================================================
+\section{Discussion}\label{sec:discussion}
+%======================================================================
+
+\subsection{What the AT1-specific premium is}
+
+The AT1-specific hazard, $0.4$--$0.5\%$ a year, about $50$bp of spread, is the part of the
+AT1's compensation that BNP's Tier~2 does not earn. Proposition~\ref{prop:clocks} gives it a
+precise risk-neutral meaning: it is the intensity of write-downs that hit the AT1 without a
+resolution that also hits Tier~2, plus whatever premium investors attach to the instrument
+beyond its expected loss. Four components are plausible, and the model cannot separate them.
+\begin{enumerate}
+  \item \emph{Write-down without resolution.} The Credit Suisse case showed that AT1 holders
+  can lose everything in a transaction that leaves more junior or more senior claims
+  partially intact. The EU authorities' March 2023 statement makes this less likely in the
+  EU, but it does not make it impossible, and investors price the tail.
+  \item \emph{Coupon discretion beyond the MDA.} The issuer may cancel coupons for reasons
+  other than the MDA, and supervisors can restrict distributions outside the MDA rule, as
+  they did with dividends in 2020. The model's MDA rule does not capture this.
+  \item \emph{Equity-like risk premium.} An AT1 bond is perpetual, its payoff in bad states is
+  close to that of equity, and its investor base includes funds with mandates that force
+  sales in stress. The premium for bearing this risk need not be the same as Tier~2's.
+  \item \emph{Liquidity.} AT1 bonds trade with wider bid--offer spreads than Tier~2 and are
+  excluded from some benchmark indices.
+\end{enumerate}
+Because the MDA component is an upper bound, the $50$bp is a lower bound for these four
+together.
+
+\subsection{Implications}
+
+\paragraph{For investors.} Two-thirds of an AT1's spread is compensation that the same
+issuer's Tier~2 also pays, at a better recovery and without extension or coupon risk. The
+relevant relative-value question is therefore whether the AT1-specific $50$bp, plus the
+$40$--$46$bp of contract features, is adequate compensation for those features, not
+whether $275$bp is a high spread in absolute terms. The model provides a consistent way to
+make that comparison across issuers: calibrate $\lres$ to each issuer's Tier~2 and compare the
+residuals.
+
+\paragraph{For risk management.} The price is flat in capital at today's level and steep
+within a point of the MDA threshold. A risk system that measures the distance to the trigger
+will understate the capital risk of these bonds; the relevant distance is to the threshold,
+which itself moves with scheduled buffer changes. The capital delta at the threshold is
+three to eight times the delta today, depending on the speed of capital mean reversion
+(Table~\ref{tab:kappa}).
+
+\paragraph{For the extension decision.} The low-margin bond is the most exposed to extension
+under an economic call rule, and the market behaved accordingly in September 2026. Whether
+the issuer would in fact extend is a question about its reputational incentives; the
+robustness results show that this question affects the extension component of the spread,
+but not the hazard or its split.
+
+\subsection{Limitations}
+
+\begin{enumerate}
+  \item \textbf{Measure.} CET1 dynamics are estimated under the physical measure and assumed
+  to hold under the pricing measure. All residual premia are in $\lambda$, which is a
+  risk-neutral intensity. The Tier~2 anchor splits it, but $\lres$ is risk-neutral too and
+  contains Tier~2's own premia.
+  \item \textbf{Recovery.} The split depends on the Tier~2 recovery (Table~\ref{tab:recovery}).
+  The market prices are consistent with the conventional $20\%$, but recovery is not observed.
+  \item \textbf{Capital mean reversion.} $\kappa$ is weakly identified, and the capital stress
+  results scale by a factor of five across its bootstrap interval.
+  \item \textbf{MDA mechanics.} Applying the quartile factor to the coupon overstates the MDA
+  cost. The leverage-ratio and MREL MDAs, the available distributable items and supervisory
+  discretion over distributions are not modelled.
+  \item \textbf{Call behaviour.} The base rule is economic; a reputational tolerance changes
+  the call probabilities but not the hazard. The regulatory approval test of CRR
+  Art.~77--78 is approximated by the MDA threshold.
+  \item \textbf{No systemic or sovereign factor.} The spread process is issuer-specific and
+  capital jumps do not move spreads. AT1 spreads widened by hundreds of basis points in March
+  2020 and March 2023 with no change in capital, and BNP's spreads widened with French
+  sovereign stress after the valuation date. A common sector and sovereign factor with
+  co-jumps in capital and spreads is the main extension.
+  \item \textbf{Rates.} The current curve is used for all future resets; a short-rate model
+  would add rate-driven extension.
+  \item \textbf{Unidentified spread parameters.} The spread volatility $\eta$ and the capital
+  premium $\beta$ are assumed. A cross-section of issuers, or a regression of AT1 spreads on the
+  distance to the MDA threshold, would calibrate $\beta$.
+  \item \textbf{Data.} Prices are evaluated rather than traded; the sample covers fifteen
+  months of relatively tight spreads; the bid--offer is of the same size as the cross-bond
+  dispersion; the CDS is in EUR and the bonds in USD. TRACE transaction prices would allow a
+  test on traded data.
+  \item \textbf{Conversion.} A single stressed share price replaces a joint model of equity and
+  capital; with conversion worth $4$bp this is immaterial for BNP, but not for an issuer close
+  to its trigger.
+\end{enumerate}
+
+\subsection{Extensions}
+
+Three extensions follow naturally. A common factor in spreads and capital, estimated on a
+cross-section of European AT1 issuers, would capture the systemic component of the risk and
+allow the AT1-specific premium to be decomposed into issuer and sector parts. A model of
+distributions in which the bank allocates the MDA between dividends and coupons would
+replace the upper bound on the MDA cost by an estimate. And a joint calibration across
+issuers, with $\lres$ anchored to each issuer's Tier~2, would turn the residual premium into a
+relative-value signal.
+
+%======================================================================
+\section{Conclusion}\label{sec:conclusion}
+%======================================================================
+
+AT1 bonds are claims on bank capital, and modelling them as such makes their three main
+contingencies, the trigger, the coupon restriction and the call, consistent by construction.
+Capital alone cannot explain their prices: the model needs a refinancing spread that drives
+the call and a write-down hazard that rises in the same states. Conditioning on the state
+paths makes the price an explicit, smooth and convex function of the hazard, so the implied
+hazard is unique and every comparative static is exact on a given set of paths.
+
+The implied hazard is not a black box. Because Tier~2 faces the same resolution event as AT1,
+pricing the issuer's Tier~2 on the same state splits the hazard into a part Tier~2 also
+prices and an AT1-specific premium. For BNP Paribas in September 2026, about four-fifths of
+the AT1 hazard and two-thirds of the spread are priced in Tier~2 as well, about $50$bp is
+specific to the AT1, and the contract features cost $40$--$46$bp. This split survives a
+reputational call rule, every attribution that prices the hazard before the contract
+features, and a term structure of the resolution hazard. What is not robust, and is reported
+with its range, is the level of capital stress, which depends on how fast the bank rebuilds
+capital after a shock.

@@ -1,0 +1,82 @@
+%======================================================================
+\section{Further derivations}\label{app:derivations}
+%======================================================================
+
+\subsection{Isometry for the compound Poisson integral}
+
+Let $\tilde L_t=L_t-\lambda_Jm_Jt$ be the compensated compound Poisson process. For a
+deterministic square-integrable $f$, $\E\int_0^tf(u)\dd\tilde L_u=0$ and
+\[
+  \E\Bigl[\Bigl(\int_0^tf(u)\dd\tilde L_u\Bigr)^2\Bigr]=\lambda_J\E[J^2]\int_0^tf(u)^2\dd u .
+\]
+\emph{Proof.} For a step function $f=\sum_kf_k\1_{(u_k,u_{k+1}]}$ the increments of $\tilde L$
+over disjoint intervals are independent with mean zero and variance
+$\lambda_J\E[J^2](u_{k+1}-u_k)$, so the second moment is
+$\lambda_J\E[J^2]\sum_kf_k^2(u_{k+1}-u_k)$. The general case follows by density of step
+functions in $L^2$. Writing $\int f\dd L=\int f\dd\tilde L+\lambda_Jm_J\int f\dd u$ gives the mean
+and variance used in Proposition~\ref{prop:cet1}, with $f(u)=e^{-\kappa(t-u)}$.
+
+\subsection{Transition of the CET1 process between observation dates}
+
+Conditionally on $C_s$, \eqref{eq:cet1sol} applied on $[s,t]$ gives
+\[
+  C_t=\theta+(C_s-\theta)e^{-\kappa(t-s)}+\sigma\int_s^te^{-\kappa(t-u)}\dd W_u-\int_s^te^{-\kappa(t-u)}\dd L_u .
+\]
+Without jumps the transition is Gaussian with mean $m=\theta+(C_s-\theta)e^{-\kappa\Delta}$ and
+variance $\sigma^2(1-e^{-2\kappa\Delta})/(2\kappa)$, $\Delta=t-s$, which is \eqref{eq:outrans}.
+With jumps it is a Gaussian mixture: conditionally on $k$ jumps at times
+$u_1,\dots,u_k$, the mean is shifted by $-\sum_iJ_ie^{-\kappa(t-u_i)}$. The likelihood used in
+Section~\ref{sec:calibration} ignores this term. Over a quarter the probability of a jump is
+$1-e^{-0.12/4}\approx3\%$, so the Gaussian likelihood treats rare large moves as diffusion,
+which biases $\hat\sigma$ upwards slightly and, through the profile likelihood, $\hat\kappa$ in
+an ambiguous direction; the 2023Q1 exclusion removes the one large positive move.
+
+\subsection{Profile likelihood}
+
+Differentiating \eqref{eq:loglik} with respect to $\sigma^2$ gives
+$\partial\ell/\partial\sigma^2=-\frac{n}{2\sigma^2}+\frac1{2\sigma^4}\sum_k(C_{k+1}-m_k)^2/w_k$,
+which vanishes at \eqref{eq:sigmahat}. Substituting back,
+\[
+  \ell_p(\kappa)=\ell\bigl(\kappa,\hat\sigma(\kappa)\bigr)
+  =-\frac n2\Bigl[1+\log\bigl(2\pi\hat\sigma^2(\kappa)\bigr)\Bigr]-\frac12\sum_k\log w_k(\kappa),
+\]
+a one-dimensional function of $\kappa$. The likelihood ratio statistic for a fixed $\kappa_0$
+is $2[\ell_p(\hat\kappa)-\ell_p(\kappa_0)]$, asymptotically $\chi^2_1$.
+
+\subsection{Yield to call and the delta method}
+
+Let $y(V)$ solve $V=\sum_jc_j(1+y/2)^{-2t_j}$ for the bullet cash flows $c_j$ to $T_1$. By the
+implicit function theorem
+\[
+  \frac{\dd y}{\dd V}=-\Bigl[\sum_jc_jt_j(1+y/2)^{-2t_j-1}\Bigr]^{-1}=-\frac{1}{D_{\mathrm{mod}}V},
+\]
+where $D_{\mathrm{mod}}$ is the modified duration to call. For a zero-recovery bullet to
+$T_1$ with a constant hazard $h$, the price is the risk-free price discounted at $r+h$, so the
+continuously compounded yield rises one-for-one with the hazard; in the base attribution the
+hazard block of $219$bp of hazard produces $231$bp of semi-annual yield-to-call spread, a ratio
+of $1.05$ that reflects compounding and the state dependence of the driver. The price
+sensitivity $|V_0'|\approx0.08$ points per basis point of hazard is larger than a bullet's,
+because it includes the exposure of extended cash flows beyond $T_1$. The delta method for the
+implied hazard, \eqref{eq:sehazard}, follows from the same implicit function argument applied
+to $V_0(\lambda)=P$.
+
+\subsection{The credit triangle for the CDS reference points}
+
+For a CDS with constant hazard $h$, recovery $R$ and continuous premium $s$, the protection
+leg is $(1-R)\int_0^Th e^{-(r+h)u}\dd u$ and the premium leg $s\int_0^Te^{-(r+h)u}\dd u$, so the
+par spread is $s=h(1-R)$ and $h=s/(1-R)$. The CDS rows of Table~\ref{tab:ladder} use this
+approximation; it ignores the term structure of the hazard, accrued premium on default and
+the difference between the standard coupon and the par spread, all of which are small at
+these spread levels.
+
+\subsection{Relation of the nested value to the Owen value}
+
+For a game $v$ on $\mathcal N$ with a partition into unions $\{\mathcal H,\mathcal K\}$, the
+Owen value of player $j\in\mathcal H$ averages its marginal contribution over all orders in
+which the members of each union are contiguous, with both orders of the unions equally
+likely \citep{Owen1977}. The nested value of Section~\ref{sec:attribution} restricts these
+orders to those in which $\mathcal H$ comes first. It is therefore the Owen value of the game
+in which the union order is fixed, and it inherits efficiency, symmetry within unions and
+the null-player property. The full Owen value would average the nested value with the
+attribution in which the contract block comes first, which values extension on a riskless
+bond and is excluded for the reason given in Section~\ref{sec:robust}.

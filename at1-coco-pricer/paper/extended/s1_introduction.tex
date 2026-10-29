@@ -1,0 +1,197 @@
+%======================================================================
+\section{Introduction}\label{sec:intro}
+%======================================================================
+
+Additional Tier~1 (AT1) bonds, often called contingent convertibles or CoCos, are the
+most equity-like instruments that European banks issue as debt. They count as
+going-concern Tier~1 capital under the Capital Requirements Regulation, they are
+perpetual and callable only by the issuer, their coupons are fully discretionary and
+non-cumulative, and their principal is converted into shares or written down when the
+bank's Common Equity Tier~1 (CET1) ratio falls below a contractual trigger. In
+addition, the resolution authority can impose losses on them at the point of
+non-viability (PONV), whatever the level of the trigger. The write-down of
+CHF~16 billion of Credit Suisse AT1s in March 2023, while the bank reported a CET1
+ratio around $14\%$, made the last feature the dominant one in market pricing.
+
+Every one of these cash-flow contingencies is written, directly or indirectly, on the
+bank's capital. The trigger is a CET1 level; the coupon restriction of the Maximum
+Distributable Amount (MDA) regime is triggered when CET1 falls inside the combined
+buffer requirement; regulatory approval of a call requires the bank to remain above its
+requirements after redemption; and the regulator's decision to declare the bank
+failing or likely to fail is, in practice, informed by the same deterioration of
+capital and market access. This paper takes that observation literally: it models the
+AT1 bond as a claim on the CET1 ratio, rather than as a straight bond with an equity
+barrier attached.
+
+\paragraph{Why not an equity barrier.}
+The workhorse market model for CoCos treats conversion as a barrier event on the share
+price \citep{DeSpiegeleerSchoutens2012}. That approach is convenient, because the share
+price is observed and its volatility is quoted, but it needs a mapping from the share
+price to the accounting ratio on which the contract is written. That mapping is not
+observable and not stable: banks' equity traded at a fraction of book value in 2023
+with unchanged capital ratios, and at a premium in other periods. A model written on
+the CET1 ratio makes the trigger, the MDA restriction and the call constraint
+consistent by construction. Its cost is that CET1 is not traded and is observed
+quarterly with a lag, so its dynamics must be estimated under the physical measure and
+the residual risk premia must be absorbed elsewhere. We absorb them in a write-down
+hazard that is implied from bond prices, and we then ask how much of that hazard the
+bank's other bonds also price.
+
+\paragraph{Capital alone is not enough.}
+A model in which CET1 is the only state variable cannot price BNP Paribas's AT1s. With
+the historical volatility of BNP's CET1 ratio, the trigger is $7.8$ percentage points
+away and is almost never reached in simulation: the bonds would be worth $114$--$118$
+against market prices of $94$--$98$. The call decision, moreover, depends on the cost
+of refinancing in the market, which moves with sector spreads and not only with the
+bank's capital. We therefore add a second state variable: the issuer's new-issue AT1
+spread, a mean-reverting Gaussian process correlated with capital shocks, with a
+capital add-on once CET1 enters the buffer. This spread does two jobs. It drives the
+call decision, so that the issuer extends exactly when refinancing is expensive, and it
+scales a doubly-stochastic write-down hazard, so that extension states are also the
+states in which the bond is riskier. Without the second link, extension would be valued
+with a discount rate that does not reflect the state, and the option not to call could
+even look valuable to the investor; we show this explicitly in
+Section~\ref{sec:robust}.
+
+\paragraph{What the hazard prices.}
+The implied write-down hazard absorbs everything the mechanical features leave
+unexplained, and on its own it cannot tell the bank's credit risk apart from risk that is
+specific to the instrument. The bank's other bonds can. Under the EU resolution
+framework the creditor hierarchy is respected: CET1 absorbs losses first, then AT1, then
+Tier~2. The joint statement of the Single Resolution Board, the EBA and ECB Banking
+Supervision of 20 March 2023 reaffirmed this ordering after the Credit Suisse case.
+Tier~2 bonds are therefore exposed to the same resolution event as AT1, at a better
+recovery, but have none of the AT1's coupon discretion, MDA restriction, trigger or
+perpetual extension. Pricing them on the same simulated state identifies how much of the
+AT1 hazard is compensation that Tier~2 also earns.
+
+\subsection{Contributions}
+
+The paper makes five contributions.
+\begin{enumerate}
+  \item \textbf{A capital-ratio model with an endogenous call and a state-dependent
+  hazard.} The CET1 ratio follows a mean-reverting jump-diffusion around the bank's
+  target, the refinancing spread a correlated Ornstein--Uhlenbeck process, and the
+  write-down time is a Cox process whose intensity is proportional to the effective
+  spread. The MDA threshold is time-varying, which matters because scheduled buffer
+  step-ups shrink the bank's cushion at constant capital.
+  \item \textbf{An exact conditional Monte Carlo for the hazard.} Conditioning on the
+  state paths integrates the write-down time out analytically. The price becomes an
+  explicit function $V(\lambda)$ that is smooth, strictly decreasing and strictly convex,
+  so the implied hazard is unique and is found by a bracketing root-finder on a single
+  set of paths. The same construction prices Tier~2 bonds with a recovery leg and a
+  piecewise term structure of the hazard.
+  \item \textbf{A Tier~2 anchor for the AT1 hazard.} Writing the AT1 hazard as
+  $\lambda=\lres+\lspec$, with two independent exponential clocks, gives the AT1 and the
+  Tier~2 the right joint survival structure. Calibrating $\lres$ to the bank's Tier~2 and
+  checking it against the senior non-preferred bond turns an unexplained premium into an
+  observable part and an AT1-specific residual.
+  \item \textbf{An order-robust attribution of the spread.} Sequential decompositions of
+  a credit spread into its components depend on the order in which features are switched
+  on. We compute the exact Shapley value over all orders and a Shapley value within
+  blocks, and show which conclusions survive. The order matters for the extension
+  component and not for the split between Tier~2-priced and AT1-specific risk.
+  \item \textbf{An application with honest identification.} We calibrate the model to
+  BNP Paribas's three USD AT1s, two Tier~2 bonds, one senior non-preferred bond and its
+  senior CDS, with 50 quarters of CET1 history. We report Monte Carlo errors, price the
+  identification limits of evaluated bid--offer quotes, bootstrap the capital dynamics
+  and show which results depend on the weakly identified speed of capital mean
+  reversion.
+\end{enumerate}
+
+\subsection{Main findings}
+
+On 25 September 2026 the three AT1s trade at yield-to-call spreads of $269$--$280$bp
+over call-matched Treasuries. The model reprices them with hazards of $2.21\%$,
+$2.18\%$ and $2.19\%$ a year. The dispersion of $2.6$bp of hazard is about four
+Monte Carlo standard errors but only $0.20$--$0.22$ points of price, the size of the
+bid--offer: the bonds are consistent with a single hazard within the precision of the
+data, and cannot discriminate between model variants that differ by a few basis points.
+
+BNP's Tier~2 2035NC34 implies a resolution hazard of $1.72\%$ at the conventional
+$20\%$ recovery, and the senior non-preferred bond $1.63\%$ at $40\%$: the two
+instruments that share the resolution event agree under the Markit recovery
+conventions, and the Tier~2 recovery that equalises them is $16\%$. The AT1 hazard
+therefore splits into $1.72\%$ priced in Tier~2 and $0.47\%$ specific to the AT1. In
+spread terms, about $180$bp of the AT1 spread is priced in Tier~2, $50$bp is an
+AT1-specific premium, and $40$--$46$bp pays for the contract features: expected MDA
+coupon cuts ($\approx30$bp, an upper bound), mechanical conversion ($\approx4$bp)
+and extension ($6$--$15$bp, decreasing in the reset margin). Because the MDA component
+is an upper bound and the total is fixed by the market price, the AT1-specific premium
+is a lower bound.
+
+The split survives three robustness checks. A reputational call rule raises the
+probability of a call at the first reset from $49$--$58\%$ to $77$--$81\%$, close to
+the levels practitioners quote, but moves neither the hazard nor its split. Every
+attribution that prices the hazard before the contract features gives the same
+$181/50$bp split. A two-piece resolution hazard bootstrapped from the two Tier~2 bonds
+($1.40\%$ to 2030, $2.10\%$ after) changes the Tier~2-priced component by less than
+5bp.
+
+Capital risk is a cliff, not a slope. At BNP's $13\%$ CET1 ratio the price moves by
+about $0.6$ points per point of capital; at the MDA threshold it moves by about four.
+Crossing the threshold switches on three mechanisms at once: coupons are cut, the call
+is blocked and the hazard rises. The distance that matters for risk management is the
+distance to the MDA threshold, which the scheduled O-SII step-ups reduce from $2.5$ to
+$2.0$ percentage points by 2028 at constant capital, not the distance to the trigger.
+The level of the capital stress depends strongly on the speed of capital mean
+reversion, which fifty quarters of history identify only to within a factor of eight;
+across that interval the price impact of the EBA adverse scenario ranges from $-7$ to
+$-38$ points.
+
+\subsection{Related literature}
+
+\paragraph{Contingent capital.} The academic literature on contingent capital starts
+from structural models in which the trigger is written on the value of the bank's
+assets or on an accounting ratio. \citet{Pennacchi2010} models bank assets as a
+jump-diffusion and prices CoCos with a trigger on the ratio of equity to assets;
+\citet{GlassermanNouri2012} derive closed-form prices for contingent capital with a
+capital-ratio trigger and gradual conversion. \citet{Flannery2014} surveys the design
+issues, including the choice between market and accounting triggers and the role of
+regulatory discretion. These models are built to study incentives and design, and
+typically do not include the MDA restriction, the issuer's call option or a regulatory
+write-down hazard independent of the trigger. Market practice instead relies on
+reduced-form or equity-barrier models \citep{DeSpiegeleerSchoutens2012}, in which the
+trigger is approximated by a barrier on the share price. \citet{AvdjievEtAl2013}
+describe the market and the instrument features in detail. Our model sits between the
+two: the state is the accounting ratio on which the contract is written, as in the
+structural tradition, but the regulatory and market features that dominate AT1 pricing
+today (discretionary coupons, MDA, issuer calls, PONV) are modelled explicitly and the
+residual risk is priced in reduced form.
+
+\paragraph{Reduced-form credit risk.} The write-down time is a doubly-stochastic
+(Cox) process in the sense of \citet{Lando1998}, with intensity driven by the state, as
+in the reduced-form models of \citet{JarrowTurnbull1995} and \citet{DuffieSingleton1999};
+\citet{BieleckiRutkowski2002} give the general construction. Our use of the
+construction is specific in two respects. First, the intensity is proportional to the
+issuer's simulated refinancing spread, which also drives the call, so that the hazard
+and the extension decision are consistent state by state. Second, we split the
+intensity into two independent clocks to price the AT1 and the Tier~2 jointly, which
+is the reduced-form counterpart of the creditor hierarchy.
+
+\paragraph{Monte Carlo methods.} Integrating the default time out conditionally on the
+state paths is a form of conditional Monte Carlo, or Rao--Blackwellisation
+\citep{Glasserman2004}; it removes the variance due to the default event and makes the
+price smooth in the hazard. Discrete monitoring of the trigger introduces the usual
+bias of barrier options, which \citet{BroadieGlassermanKou1997} correct with a shift of
+the barrier; we show that the correction is negligible here.
+
+\paragraph{Decomposition and attribution.} Attributing a spread to its components by
+switching features on one at a time is order-dependent whenever the features interact.
+The Shapley value \citep{Shapley1953} resolves the dependence by averaging over all
+orders, and \citet{Shorrocks2013} applies it to decompositions in economics; the value
+for games with a priori unions \citep{Owen1977} handles groups of related factors. We
+use both ideas and show that, for AT1 bonds, the economically consistent attribution
+prices the hazard before the contract features.
+
+\subsection{Outline}
+
+Section~\ref{sec:institutions} describes the instrument, the regulatory framework and
+the three BNP Paribas bonds. Section~\ref{sec:model} sets out the model and derives
+the properties of the state processes. Section~\ref{sec:valuation} derives the pricing
+equations, the conditional Monte Carlo estimator and its properties, and the pricing of
+Tier~2 and senior bonds. Section~\ref{sec:attribution} defines the spread attribution.
+Section~\ref{sec:calibration} describes the data and the calibration.
+Section~\ref{sec:results} reports the results, Section~\ref{sec:robust} the robustness
+checks and Section~\ref{sec:discussion} discusses implications and limitations. The
+appendices contain proofs, numerical diagnostics and the parameter table.

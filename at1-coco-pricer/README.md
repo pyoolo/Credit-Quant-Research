@@ -20,6 +20,8 @@ The result is a valuation in which price, coupon-cancellation probability, and
 loss-absorption probability all move together off one economically meaningful
 driver.
 
+**Paper:** [short note](paper/at1_coco_note.pdf) (17 pages) and [extended version](paper/at1_coco_extended.pdf) (42 pages, with derivations and proofs).
+
 **Case study → [RESEARCH.md](RESEARCH.md):** the model calibrated to BNP Paribas's
 three USD AT1s (Capital IQ prices, 50 quarters of CET1, FRED Treasury curve, EBA
 stress test), anchored to BNP's own Tier 2 and senior non-preferred bonds. Of the

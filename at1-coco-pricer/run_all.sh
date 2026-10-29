@@ -43,13 +43,14 @@ fi
 step "5/9 Capital structure: T2/SNP anchor (~2 min)"; python -u scripts/capital_structure.py | tee results/capital_structure_log.txt
 step "6/9 Spread, call, stress (~5 min)"; python -u scripts/spread_and_stress.py | tee results/stress_log.txt
 step "7/9 Robustness (~2 min)"; python -u scripts/robustness.py | tee results/robustness_log.txt
+step "7b/9 Numerical diagnostics (~4 min)"; python -u scripts/numerics.py | tee results/numerics_log.txt
 step "8/9 Parameter uncertainty (~6 min)"; python -u scripts/parameter_uncertainty.py | tee results/uncertainty_log.txt
 step "9/9 Video (~2 min)";     python scripts/make_video.py
 
 if command -v latexmk >/dev/null 2>&1; then
   step "PDF note"
-  (cd paper && latexmk -pdf -interaction=nonstopmode -quiet at1_coco_note.tex >/dev/null && latexmk -c >/dev/null)
-  echo "paper/at1_coco_note.pdf rebuilt"
+  (cd paper && for f in at1_coco_note at1_coco_extended; do latexmk -pdf -interaction=nonstopmode -quiet $f.tex >/dev/null && latexmk -c $f.tex >/dev/null; done)
+  echo "paper/at1_coco_note.pdf and paper/at1_coco_extended.pdf rebuilt"
 else
   echo "latexmk not found: PDF not rebuilt"
 fi
