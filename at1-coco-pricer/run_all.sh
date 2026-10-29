@@ -32,18 +32,19 @@ if missing:
 print("all inputs present")
 PY
 
-step "1/8 Dataset";            python scripts/build_bnp_dataset.py > results/build_log.txt
-step "2/8 Tests";              python -m pytest -q
-step "3/8 Market analysis";    python -u scripts/market_analysis.py | tee results/market_log.txt
+step "1/9 Dataset";            python scripts/build_bnp_dataset.py > results/build_log.txt
+step "2/9 Tests";              python -m pytest -q
+step "3/9 Market analysis";    python -u scripts/market_analysis.py | tee results/market_log.txt
 if [[ $QUICK -eq 0 ]]; then
-  step "4/8 Calibration (~10 min)"; python -u scripts/calibrate_bnp.py | tee results/calibrate_log.txt
+  step "4/9 Calibration (~10 min)"; python -u scripts/calibrate_bnp.py | tee results/calibrate_log.txt
 else
-  step "4/8 Calibration skipped (--quick)"
+  step "4/9 Calibration skipped (--quick)"
 fi
-step "5/8 Capital structure: T2/SNP anchor (~2 min)"; python -u scripts/capital_structure.py | tee results/capital_structure_log.txt
-step "6/8 Spread, call, stress (~5 min)"; python -u scripts/spread_and_stress.py | tee results/stress_log.txt
-step "7/8 Parameter uncertainty (~6 min)"; python -u scripts/parameter_uncertainty.py | tee results/uncertainty_log.txt
-step "8/8 Video (~2 min)";     python scripts/make_video.py
+step "5/9 Capital structure: T2/SNP anchor (~2 min)"; python -u scripts/capital_structure.py | tee results/capital_structure_log.txt
+step "6/9 Spread, call, stress (~5 min)"; python -u scripts/spread_and_stress.py | tee results/stress_log.txt
+step "7/9 Robustness (~2 min)"; python -u scripts/robustness.py | tee results/robustness_log.txt
+step "8/9 Parameter uncertainty (~6 min)"; python -u scripts/parameter_uncertainty.py | tee results/uncertainty_log.txt
+step "9/9 Video (~2 min)";     python scripts/make_video.py
 
 if command -v latexmk >/dev/null 2>&1; then
   step "PDF note"

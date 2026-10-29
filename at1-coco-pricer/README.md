@@ -23,9 +23,11 @@ driver.
 **Case study → [RESEARCH.md](RESEARCH.md):** the model calibrated to BNP Paribas's
 three USD AT1s (Capital IQ prices, 50 quarters of CET1, FRED Treasury curve, EBA
 stress test), anchored to BNP's own Tier 2 and senior non-preferred bonds. Of the
-~270–280bp spread, ≈180bp is bank resolution risk already priced in Tier 2, ≈50bp an
-AT1-specific premium, ≈30bp MDA coupon cuts, ≈4bp conversion and 6–15bp extension.
-The first call is a 49–58% event; the capital cliff is ~0.6pt per point of CET1 today
+~270–280bp spread, ≈180bp is also priced in Tier 2, ≈50bp is an AT1-specific premium
+(a lower bound) and 40–46bp are contract features (MDA coupon cuts, conversion,
+extension); the split is robust to the call rule, the attribution order and a term
+structure of the hazard. The first call is a 49–58% event with a purely economic rule
+(77–81% with a reputational one); the capital cliff is ~0.6pt per point of CET1 today
 and ~4pt at the MDA threshold. A bootstrap shows the speed of capital mean reversion
 is the weakest input; bond prices lean towards the faster end but, within the
 bid–offer, do not pin it down.
@@ -68,14 +70,15 @@ at1-coco-pricer/
 │   ├── market.py        ← dated AT1s, stochastic refi spread, implied PONV,
 │   │                       T2/SNP bullets with recovery (resolution hazard)
 │   └── data.py          ← paths and loaders for data/
-├── tests/               ← 30 tests (dynamics, MDA, pricing, risk signs, market, T2)
+├── tests/               ← 32 tests (dynamics, MDA, pricing, risk signs, market, T2)
 ├── scripts/
 │   ├── price_example.py
 │   ├── trigger_term_structure.py
 │   ├── build_bnp_dataset.py ← Capital IQ exports -> data/processed/
 │   ├── market_analysis.py   ← capital and price analysis
 │   ├── calibrate_bnp.py     ← implied PONV and cross-bond test
-│   ├── capital_structure.py ← T2/SNP/CDS anchor: bank resolution vs AT1-specific hazard
+│   ├── capital_structure.py ← T2/SNP/CDS anchor: Tier 2-priced vs AT1-specific hazard
+│   ├── robustness.py        ← call tolerance, attribution order, hazard term structure
 │   ├── spread_and_stress.py ← spread decomposition, call odds, stress tests
 │   ├── parameter_uncertainty.py ← bootstrap of CET1 dynamics, kappa sensitivity
 │   └── make_video.py        ← animated charts

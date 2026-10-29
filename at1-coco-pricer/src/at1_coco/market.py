@@ -138,6 +138,9 @@ class ModelSettings:
     # scheduled changes of the combined buffer: ((effective date, change in pp), ...),
     # e.g. the O-SII step-ups. The MDA threshold is mda_threshold + buffer(t).
     buffer_steps: tuple = ()
+    # reputational call: the issuer also calls when its reset margin is up to
+    # this much (decimal) BELOW the new-issue spread (0 = purely economic rule)
+    call_tolerance: float = 0.0
     share_stress: float = 0.20       # share price at trigger as fraction of today's
     ponv_recovery: float = 0.0
     hazard_linked: bool = True       # PONV hazard proportional to the simulated AT1 spread
@@ -291,7 +294,7 @@ def cash_flow_profile(bond: DatedAT1, mkt: MarketState, ms: ModelSettings,
         ci = cidx[call_col]
         # issuer calls when the reset margin costs more than a new AT1, needs
         # the note alive, and (regulatory approval) CET1 above the MDA threshold
-        ok = (bond.reset_margin > S_eff[:, ci]) & (ci[None, :] < trig[:, None]) & (C[:, ci] >= top[ci][None, :])
+        ok = (bond.reset_margin > S_eff[:, ci] - ms.call_tolerance) & (ci[None, :] < trig[:, None]) & (C[:, ci] >= top[ci][None, :])
         has = ok.any(axis=1)
         first = np.argmax(ok, axis=1)
         call_at[has] = call_col[first[has]]
@@ -463,3 +466,43 @@ def implied_resolution_hazard(bond: DatedBullet, clean_price: float, discount_yi
     del f
     gc.collect()
     return lam, prof
+
+
+# ---------------------------------------------------------------------------
+# term structure of the resolution hazard: two pieces, split at T1
+# ---------------------------------------------------------------------------
+def piecewise_exposure(I: np.ndarray, lam1: float, lam2: float, i_t1: np.ndarray) -> np.ndarray:
+    """Integrated hazard when the level is ``lam1`` up to T1 and ``lam2`` after.
+
+    ``I`` is the integrated driver at some times (paths x k, or paths) and
+    ``i_t1`` its value at T1 on each path.  Because I is non-decreasing in t,
+    min(I_t, I_T1) = I_{min(t, T1)}, so the exposure needs only I at T1.
+    """
+    it1 = i_t1[:, None] if I.ndim == 2 else i_t1
+    return lam1 * np.minimum(I, it1) + lam2 * np.maximum(I - it1, 0.0)
+
+
+def at1_price_piecewise(prof: CashFlowProfile, r_cont: float, lam_spec: float,
+                        lam1: float, lam2: float, i_t1: np.ndarray) -> float:
+    """AT1 dirty price with hazard lam_spec (flat) + resolution hazard (lam1, lam2)."""
+    e_cpn = lam_spec * prof.i_cpn + piecewise_exposure(prof.i_cpn, lam1, lam2, i_t1)
+    e_end = lam_spec * prof.i_end + piecewise_exposure(prof.i_end, lam1, lam2, i_t1)
+    pv = (prof.cpn * np.exp(-r_cont * prof.t_cpn[None, :] - e_cpn)).sum(axis=1)
+    pv += prof.pay_end * np.exp(-r_cont * prof.t_end - e_end)
+    tail = prof.tail_coupon / (r_cont + (lam_spec + lam2) * prof.tail_driver)
+    pv += np.where(prof.survive, tail * np.exp(-r_cont * prof.t_end - e_end), 0.0)
+    return float(pv.mean())
+
+
+def bullet_price_piecewise(prof: BulletProfile, r_cont: float, lam1: float, lam2: float,
+                           i_t1: np.ndarray, recovery: float) -> float:
+    """T2 / senior dirty price with a two-piece resolution hazard."""
+    e_cpn = piecewise_exposure(prof.i_cpn, lam1, lam2, i_t1)
+    e_end = piecewise_exposure(prof.i_end, lam1, lam2, i_t1)
+    pv = (prof.cpn * np.exp(-r_cont * prof.t_cpn[None, :] - e_cpn)).sum(axis=1)
+    pv += prof.notional * np.exp(-r_cont * prof.t_end - e_end)
+    if recovery:
+        surv = np.exp(-piecewise_exposure(prof.i_grid, lam1, lam2, i_t1))
+        dq = surv[:, :-1] - surv[:, 1:]
+        pv += recovery * prof.notional * (dq * np.exp(-r_cont * prof.t_grid[None, 1:])).sum(axis=1)
+    return float(pv.mean())

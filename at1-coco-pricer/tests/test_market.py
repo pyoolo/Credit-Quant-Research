@@ -146,3 +146,24 @@ def test_implied_resolution_hazard_roundtrip(randoms):
     clean = dirty - bond.accrued(MKT.val_date)
     lam, _ = implied_resolution_hazard(bond, clean, y, st, MKT.val_date, ms.dt, 0.2)
     assert lam == pytest.approx(0.015, abs=1e-6)
+
+
+def test_piecewise_hazard_reduces_to_flat(randoms):
+    from at1_coco.market import at1_price_piecewise, bullet_price_piecewise, bullet_profile
+    bond, ms, st = _t2_setup(randoms)
+    prof = bullet_profile(bond, st, MKT.val_date, ms.dt)
+    it1 = st.I[:, 48]
+    assert bullet_price_piecewise(prof, 0.045, 0.02, 0.02, it1, 0.2) == pytest.approx(
+        prof.dirty_price(0.045, 0.02, 0.2), rel=1e-12)
+    at1 = cash_flow_profile(BOND, MKT, ms, randoms)
+    i_at1 = at1.i_cpn[:, 0] * 0 + st.I[:, 48]
+    assert at1_price_piecewise(at1, 0.045, 0.005, 0.015, 0.015, i_at1) == pytest.approx(
+        at1.dirty_price(0.045, 0.02), rel=1e-12)
+
+
+def test_call_tolerance_raises_call_probability(randoms):
+    from dataclasses import replace
+    ms = _ms(vol=0.01)
+    p0 = cash_flow_profile(BOND, MKT, ms, randoms).diagnostics["p_call_first"]
+    p1 = cash_flow_profile(BOND, MKT, replace(ms, call_tolerance=0.01), randoms).diagnostics["p_call_first"]
+    assert p1 > p0

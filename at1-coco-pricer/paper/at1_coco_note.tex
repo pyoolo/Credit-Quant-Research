@@ -14,7 +14,7 @@
 \title{Pricing AT1 Contingent Convertibles as a Claim on Bank Capital\\[4pt]
 \large Model, numerical method, and a calibration to BNP Paribas's USD AT1s}
 \author{Paolo Mastrogiacomo \\ \texttt{Credit-Quant-Research / at1-coco-pricer}}
-\date{September 2026 \\ \small revised October 2026: Tier~2 anchor, MDA path, data layout}
+\date{September 2026 \\ \small revised October 2026: Tier~2 anchor, MDA path, robustness, data layout}
 
 \begin{document}
 \maketitle
@@ -33,15 +33,20 @@ BNP Paribas's three USD AT1s on 25 September 2026, with the FRED Treasury curve,
 O-SII step-ups, the three bonds imply a hazard of about $2.2\%$ a year, equal
 across bonds to within the bid--offer. Pricing BNP's Tier~2 and senior
 non-preferred bonds on the same simulated state splits that hazard: $1.7\%$ is
-resolution risk already priced in Tier~2 (recovery $20\%$), $0.5\%$ is specific
-to the AT1. Of the $\approx270$--$280$bp spread, about $180$bp is bank resolution
-risk, $50$bp an AT1-specific premium, $30$bp expected MDA coupon cuts, $4$bp
-mechanical conversion and $6$--$15$bp extension. The price is flat in capital above
+priced in Tier~2 as well (resolution risk plus Tier~2's own risk and liquidity
+premia, at a $20\%$ recovery), $0.5\%$ is specific to the AT1. Of the
+$\approx270$--$280$bp spread, about $180$bp is priced in Tier~2, $50$bp is an
+AT1-specific premium (a lower bound, since the MDA component is an upper bound)
+and $40$--$46$bp are the contract features: expected MDA coupon cuts, conversion and
+extension, whose split depends on the order of attribution. These figures are
+robust to a reputational call rule, to the order of the decomposition and to a
+term structure of the resolution hazard. The price is flat in capital above
 the MDA threshold ($\approx0.6$ points per point of CET1) and steep at it
 ($\approx4$ points). The speed of capital mean reversion is the weakest input:
 the half-life of a capital shock is anywhere between 1.5 and 11 years, and the
-capital stress results scale by a factor of five across that range; bond prices
-lean towards the faster end but do not pin it down.
+capital stress results scale by a factor of five across that range. The data end
+on 25 September 2026, before BNP's spreads widened with French sovereign stress
+in October.
 \end{abstract}
 
 \tableofcontents
@@ -404,6 +409,10 @@ $\partial V/\partial C_0$ is a finite difference on a grid of $C_0$.
 %======================================================================
 \section{Results: BNP Paribas, 25 September 2026}\label{sec:results}
 %======================================================================
+All results are as of 25 September 2026. In the following month BNP's spreads
+widened with French sovereign stress (the 10-year OAT above $5\%$): senior CDS
+5y from 57 to 74bp and, in Capital IQ spreads to benchmark, the SNP from 98 to
+122bp and the Tier~2 2035NC34 from 141 to 153bp by 27 October. The analysis does not include that move.
 
 \subsection{Capital}
 \begin{figure}[H]
@@ -467,7 +476,7 @@ points.
 \caption{Implied PONV hazard per bond, weekly.}
 \end{figure}
 
-\subsection{What BNP's Tier~2 says: bank credit vs AT1-specific risk}\label{sec:capstruct}
+\subsection{What BNP's Tier~2 says: risk priced in Tier~2 vs AT1-specific risk}\label{sec:capstruct}
 \begin{table}[H]
 \centering
 \begin{tabular}{lcccc}
@@ -498,8 +507,11 @@ shorter tenors and is more liquid than the cash bonds.
   \lambda = 2.19\% = \underbrace{1.72\%}_{\lambda_{\mathrm{res}}:\ \text{priced in Tier~2}}
   + \underbrace{0.47\%}_{\lambda_{\mathrm{spec}}:\ \text{AT1-specific}} ,
 \]
-so about four-fifths of the AT1 hazard is BNP's own credit risk, which the AT1
-holder would also bear in Tier~2 at a better recovery. Over the 66 weekly dates
+so about four-fifths of the AT1 hazard is compensation that BNP's Tier~2 also
+earns. It is mostly the risk of resolution, which the AT1 holder would also bear
+in Tier~2 at a better recovery; it also contains whatever risk and liquidity
+premia Tier~2 itself carries, so ``priced in Tier~2'' is the accurate label, and
+``bank credit risk'' an approximation. Over the 66 weekly dates
 the Tier~2 share ranges from $66\%$ to $80\%$ (mean $72\%$). The split depends on
 the recovery assumed for Tier~2:
 \begin{center}
@@ -515,7 +527,7 @@ Share of AT1 hazard & 63\% & 70\% & 78\% & 90\% & 105\% \\
 \end{center}
 A Tier~2 recovery as high as the senior one would leave nothing for the AT1
 premium, which is implausible; any recovery up to $30\%$ attributes at least
-three-fifths of the AT1 hazard to bank credit.
+three-fifths of the AT1 hazard to what Tier~2 also prices.
 \begin{figure}[H]
 \centering\includegraphics[width=\textwidth]{capital_structure.png}
 \caption{Left: implied hazards down BNP's capital structure. Right: the AT1
@@ -544,13 +556,19 @@ Total $=$ market & 279 & 274 & 269 \\
 \begin{figure}[H]
 \centering\includegraphics[width=0.85\textwidth]{spread_decomposition.png}
 \end{figure}
-Two-thirds of the spread, about $180$bp, is resolution risk that BNP's Tier~2
-also prices; another $50$bp is the premium for being an AT1 rather than a
-Tier~2 (write-down without resolution, the equity-like perpetual and
-discretionary profile, liquidity). The mechanical features explain the rest:
-expected MDA coupon cuts $\approx30$bp (an upper bound, see the limitations),
-conversion at the trigger, a 1.4--1.6\% lifetime event, $\approx4$bp, and
-extension $6$--$15$bp, decreasing in the reset margin as the theory requires.
+Two-thirds of the spread, about $180$bp, is risk that BNP's Tier~2 also
+prices; another $50$bp is the premium for being an AT1 rather than a Tier~2
+(write-down without resolution, the equity-like perpetual and discretionary
+profile, liquidity). The contract features explain the rest: expected MDA
+coupon cuts $\approx30$bp, conversion at the trigger, a 1.4--1.6\% lifetime
+event, $\approx4$bp, and extension $6$--$15$bp, decreasing in the reset margin as
+the theory requires.
+
+The MDA figure is an \emph{upper bound}. The model applies the MDA quartile
+factor to the coupon itself, while the MDA caps all distributions and a bank
+inside the buffer would cut dividends, buy-backs and variable pay first. The
+total spread is fixed by the market, so any overstatement of the MDA component
+is taken from the AT1-specific premium: the $50$bp is a \emph{lower bound}.
 The split between the AT1 premium and the MDA component depends on $\kappa$
 (\S\ref{sec:uncert}); the total and the resolution component do not.
 
@@ -596,7 +614,7 @@ AT1-specific premium $\times2$ & $-3.6$ & $-3.8$ & $-3.6$ \\
 \centering\includegraphics[width=0.8\textwidth]{price_vs_cet1.png}
 \end{figure}
 The two hazard shocks replace an arbitrary ``hazard $\times3$'' scenario with
-ones that have a market counterpart: doubling the resolution hazard is what a
+ones that have a market counterpart: doubling the Tier~2-priced hazard is roughly what a
 doubling of BNP's Tier~2 spread would imply, and it costs three times as much as
 doubling the AT1-specific premium. The capital delta is $\approx0.6$ points per
 point of CET1 at $13\%$ (CET1 $\pm0.5$pp) and $\approx4$ at the MDA threshold
@@ -605,6 +623,66 @@ mechanisms at once: coupons are cut by \eqref{eq:mda}, the call is blocked by
 \eqref{eq:call}, and the hazard rises through \eqref{eq:seff}--\eqref{eq:hazard}.
 For risk management, the distance that matters is the distance to the MDA
 threshold, not to the trigger.
+
+\subsection{Robustness: call behaviour, attribution order, hazard term structure}\label{sec:robust}
+\textbf{Reputational calls.} The call rule \eqref{eq:call} is purely economic,
+while European national champions have almost always called at the first date.
+Let the issuer call also when its margin is up to $\delta$ \emph{below} the
+new-issue spread, $m>s_{T_k}-\delta$, and recalibrate:
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+Tolerance $\delta$ (bp) & 0 & 25 & 50 & 100 \\
+\midrule
+$\Pr(\text{called at }T_1)$, 6.875\% / 7.45\% & 49\% / 58\% & 57\% / 66\% & 65\% / 72\% & 77\% / 81\% \\
+Implied hazard, average (\%/yr) & 2.19 & 2.20 & 2.20 & 2.22 \\
+Extension component, 6.875\% (bp) & 15 & 14 & 13 & 11 \\
+Tier~2 share of the AT1 hazard & 78\% & 78\% & 78\% & 78\% \\
+\bottomrule
+\end{tabular}
+\end{center}
+A reputational rule raises the call probabilities to the level practitioners
+quote, and lowers the extension component of the low-margin bond by a few basis
+points, but leaves the hazard and its split untouched: the market price pins the
+hazard down whatever the call rule.
+
+\textbf{Order of attribution.} A sequential decomposition depends on the order
+in which features are switched on. Three alternatives, average of the three bonds
+(bp):
+\begin{center}
+\begin{tabular}{lcccc}
+\toprule
+ & Base order & Nested Shapley & Full Shapley & Reverse order \\
+\midrule
+Priced in Tier~2 & 181 & 181 & 211 & 239 \\
+AT1-specific premium & 50 & 50 & 58 & 68 \\
+MDA coupon cuts & 29 & 36 & 35 & 41 \\
+Conversion & 4 & 5 & 6 & 11 \\
+Extension & 10 & 2 & $-36$ & $-85$ \\
+\midrule
+Total & 274 & 274 & 274 & 274 \\
+\bottomrule
+\end{tabular}
+\end{center}
+The base order switches the hazard on first. The nested Shapley value is
+symmetric within the hazard block (Tier~2-priced vs AT1-specific) and within the
+contract features (MDA, conversion, extension), with the hazard block first.
+The full Shapley value and the reverse order also average in orders that value
+extension on a \emph{riskless} bond, where not calling a bond that pays the
+reset margin over Treasuries is a gift to the investor; this is the
+inconsistency \S\ref{sec:t2model} and \eqref{eq:hazard} are designed to avoid,
+and it makes the extension component negative. In every attribution in which the
+hazard is priced before the contract features, the Tier~2 and AT1-specific
+components are the same ($181$ and $50$bp); only the split of the remaining
+$\approx43$bp among MDA, conversion and extension depends on the order.
+
+\textbf{Term structure of the resolution hazard.} The two Tier~2 bonds call in
+August 2030 and November 2034. Bootstrapping a two-piece hazard instead of one
+flat level gives $1.40\%$ a year to 2030 and $2.10\%$ after (flat: $1.72\%$). The
+AT1-specific hazard re-solved on top of it falls from $0.47\%$ to $0.39\%$ on
+average, and the Tier~2-priced component of the spread moves by less than 5bp
+($176$--$185$bp). An upward-sloping resolution curve slightly \emph{raises} the
+share of the AT1 hazard attributed to Tier~2.
 
 \subsection{How much can we trust the capital parameters?}\label{sec:uncert}
 \textbf{Bootstrap.} We simulate 1{,}000 CET1 histories on the observed quarterly
@@ -683,11 +761,10 @@ re-calibrated to today's price. Shaded: 90\% bootstrap range of $\kappa$.}
   factor to the coupon itself, as \eqref{eq:mda} does, overstates the MDA
   component. The binding constraint may also be the leverage-ratio or MREL MDA,
   and available distributable items, none of which is modelled.
-  \item \textbf{Call behaviour.} The call rule is purely economic. European
-  national champions have almost always called at the first date for
-  reputational reasons; a reputational margin $\delta$ in \eqref{eq:call}
-  ($m>s_T-\delta$) would raise the call probabilities, and the approval test
-  under CRR art.~77--78 is not the MDA test.
+  \item \textbf{Call behaviour.} The base call rule is purely economic; a
+  reputational tolerance raises the call probabilities but not the hazard or its
+  split (\S\ref{sec:robust}). The approval test under CRR art.~77--78 is not the
+  MDA test.
   \item \textbf{Systemic and sovereign risk.} The spread process is
   issuer-specific and capital jumps do not move spreads. AT1 spreads widened by
   hundreds of basis points in March 2020 and March 2023 with no change in
@@ -746,6 +823,7 @@ File & Content \\
 \texttt{data.py}, \texttt{build\_bnp\_dataset.py} & data layout, Capital IQ exports to one panel \\
 \texttt{calibrate\_bnp.py} & calibration (\S\ref{sec:calib}) \\
 \texttt{capital\_structure.py} & Tier~2/SNP/CDS anchor (\S\ref{sec:capstruct}) \\
+\texttt{robustness.py} & call tolerance, attribution order, hazard term structure (\S\ref{sec:robust}) \\
 \texttt{spread\_and\_stress.py} & decomposition, call analysis, stress \\
 \texttt{parameter\_uncertainty.py} & bootstrap, $\kappa$ sensitivity (\S\ref{sec:uncert}) \\
 \bottomrule
