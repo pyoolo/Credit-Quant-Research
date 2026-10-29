@@ -115,8 +115,10 @@ With $n=20{,}000$ paths, the standard error of the dirty price is $0.05$--$0.06$
 and that of the implied hazard is $0.67$bp for all three bonds
 (Appendix~\ref{app:numerics}). Because the three bonds are priced on the same paths, their
 Monte Carlo errors are strongly positively correlated, and the cross-bond dispersion of
-the implied hazards is much more precise than each hazard: across independent seeds and
-path counts from $5{,}000$ to $40{,}000$, the dispersion stays within $2.3$--$2.9$bp.
+the implied hazards is more precise than each hazard: across independent seeds and path
+counts from $5{,}000$ to $40{,}000$, the dispersion stays within $2.0$--$3.2$bp. The time
+step matters more than the number of paths: on a fortnightly grid the dispersion is
+$4.6$bp (Appendix~\ref{app:numerics}).
 
 \subsection{Tier~2 and senior bonds}\label{sec:t2}
 
@@ -202,7 +204,8 @@ $0.5826\,\sigma\sqrt{\Delta}$; here the shift is $0.08$pp of CET1 against a dist
 $7.8$pp to the trigger, and the conversion component of the spread is only $4$bp, so the
 effect is negligible. Third, events on the grid are read at grid dates, while coupons are
 discounted at their exact dates. Halving the step to fortnightly changes the implied
-hazards by at most $1.6$bp (Appendix~\ref{app:numerics}).
+hazards by at most $1.6$bp, but not by the same amount for every bond, so the cross-bond
+dispersion rises from $2.6$ to $4.6$bp (Appendix~\ref{app:numerics}).
 
 \subsection{Common random numbers}
 

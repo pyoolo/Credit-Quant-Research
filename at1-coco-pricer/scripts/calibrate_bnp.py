@@ -2,17 +2,18 @@
 
 Steps
 -----
-1. Historical CET1 dynamics: exact-OU maximum likelihood on the CET1 series
-   (annual 2014-2023, quarterly 2024-2026), long-run level fixed at the 13%
-   management target.
+1. Historical CET1 dynamics: exact-OU maximum likelihood on the quarterly CET1
+   series (2014Q1-2026Q2), long-run level fixed at the 13% management target.
 2. Market inputs per date: prices, the FRED Treasury curve (5y CMT for the
    reset, call-matched yield for discounting; file ``data/fred_treasury.csv``),
    the current AT1 spread, latest CET1, share price.
 3. Implied PONV hazard for each bond on each date.  If the model captured the
    bonds' relative value, the three implied hazards would coincide (same issuer,
    same capital, same trigger).  The gap between them is the test.
-4. The cross-section identifies the refinancing-spread volatility: the value
-   that makes the three hazards closest is the market-implied "extension vol".
+4. Sensitivity of the cross-section to the refinancing-spread volatility.  The
+   gap between the three hazards keeps shrinking as the vol rises, with no
+   interior minimum, so the cross-section does not identify it: the base case
+   (100bp) is an assumption, reported with this grid.
 
 Outputs: ``results/calibration_*.csv`` and ``results/implied_ponv.png``.
 """
@@ -80,10 +81,11 @@ def fit_cet1_ou(c: pd.Series, theta: float = 13.0,
 
 
 # Base-case speed of capital mean reversion.  History alone gives 0.165
-# (90% bootstrap CI 0.06-0.48); the three bond prices are only mutually
-# consistent for faster mean reversion (see parameter_uncertainty.py).  0.35 is
-# inside the historical CI and close to the market plateau: the value both
-# sources of information can live with.  sigma is re-estimated given kappa.
+# (90% bootstrap CI 0.06-0.48) and rejects kappa above ~0.37 at 5%.  Requiring
+# the AT1 to be priced as at least as risky as BNP's Tier 2 (lam_spec >= 0)
+# rules out kappa below ~0.17, and the three bond prices lean towards faster
+# mean reversion (see parameter_uncertainty.py).  0.35 lies in the upper part of
+# the admissible range [0.17, 0.37].  sigma is re-estimated given kappa.
 BASE_KAPPA = 0.35
 
 # Base-case volatility of the new-issue AT1 spread (decimal).  With the FRED
@@ -305,8 +307,8 @@ def main():
     piv["dispersion_bp"] = 1e4 * (piv.max(axis=1) - piv.min(axis=1))
     print("\nimplied PONV hazard (per year) on", last["date"].iloc[0].date())
     print(piv.round(4).to_string())
-    # the vol that makes the three bonds most consistent (U-shaped dispersion);
-    # the base case uses the grid point closest to it
+    # the dispersion falls monotonically with the vol (no interior minimum), so
+    # the base case is the assumed BASE_SPREAD_VOL, not an estimate
     best_v = BASE_SPREAD_VOL
     print(f"base-case spread vol: {1e4 * best_v:.0f}bp (grid above = sensitivity; "
           f"lowest gap on the grid at {piv['dispersion_bp'].idxmin():.0f}bp)")

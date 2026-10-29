@@ -28,9 +28,14 @@ Standard error of $\lambda$ (bp) & 0.67 & 0.66 & 0.67 \\
 \paragraph{Convergence.} Table~\ref{tab:conv} reports the implied hazards for path counts from
 $5{,}000$ to $40{,}000$ with two independent seeds, and for a fortnightly instead of a
 monthly grid. The levels vary by about $\pm1$bp across seeds, in line with the standard
-errors of Table~\ref{tab:mcerr}. The cross-bond dispersion is much more stable, at
-$2.3$--$2.9$bp across all runs, because the three bonds share their random numbers.
-Halving the time step changes the hazards by at most $1.6$bp.
+errors of Table~\ref{tab:mcerr}. The cross-bond dispersion is more stable, at $2.0$--$3.2$bp
+across seeds and path counts, because the three bonds share their random numbers.
+Halving the time step changes the hazards by at most $1.6$bp, but in different directions
+for different bonds: the 6.875\% and the 7.20\% rise, the 7.45\% falls, and the dispersion
+increases to $4.6$bp, or about $0.37$ points of price, slightly above the largest
+bid--offer of the three bonds. Discretisation is therefore a larger source of error in
+the cross-bond test than sampling, and the test should be read as having a resolution of
+a few basis points of hazard at best.
 
 \begin{table}[H]
 \centering
@@ -146,22 +151,9 @@ update the whole paper.
 %======================================================================
 
 \begin{figure}[H]
-\centering\includegraphics[width=0.75\textwidth]{cet1_fan_chart.png}
-\caption{The stylised engine of the repository with illustrative parameters (not the BNP
-calibration): simulated CET1 distribution over fifteen years, with the top of the MDA buffer
-and the mechanical trigger.}
-\end{figure}
-
-\begin{figure}[H]
 \centering\includegraphics[width=0.85\textwidth]{bnp_at1_yield_split.png}
 \caption{Change in each AT1's yield since 31 December 2025 (or issue) and over the four weeks
 to 25 September 2026, split into the change in the ten-year Treasury yield and the change in
 the spread over it.}
-\end{figure}
-
-\begin{figure}[H]
-\centering\includegraphics[width=0.85\textwidth]{absorption_and_price_curves.png}
-\caption{The stylised engine with illustrative parameters: cumulative probability of loss
-absorption by tenor for a strong, base and weak bank (left), and price and average coupon
-restriction against the starting CET1 ratio (right).}
+\label{fig:yieldsplit}
 \end{figure}
