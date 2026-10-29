@@ -85,7 +85,9 @@ The paper makes five contributions.
   $\lambda=\lres+\lspec$, with two independent exponential clocks, gives the AT1 and the
   Tier~2 the right joint survival structure. Calibrating $\lres$ to the bank's Tier~2 and
   checking it against the senior non-preferred bond turns an unexplained premium into an
-  observable part and an AT1-specific residual.
+  observable part and an AT1-specific residual. Because the creditor hierarchy requires
+  the residual to be non-negative, the anchor also restricts the capital dynamics, which
+  bond prices alone cannot identify.
   \item \textbf{An order-robust attribution of the spread.} Sequential decompositions of
   a credit spread into its components depend on the order in which features are switched
   on. We compute the exact Shapley value over all orders and a Shapley value within
@@ -111,22 +113,30 @@ data, and cannot discriminate between model variants that differ by a few basis 
 BNP's Tier~2 2035NC34 implies a resolution hazard of $1.72\%$ at the conventional
 $20\%$ recovery, and the senior non-preferred bond $1.63\%$ at $40\%$: the two
 instruments that share the resolution event agree under the Markit recovery
-conventions, and the Tier~2 recovery that equalises them is $16\%$. The AT1 hazard
-therefore splits into $1.72\%$ priced in Tier~2 and $0.47\%$ specific to the AT1. In
-spread terms, about $180$bp of the AT1 spread is priced in Tier~2, $50$bp is an
-AT1-specific premium, and $40$--$46$bp pays for the contract features: expected MDA
+conventions, and the Tier~2 recovery that equalises them is $16\%$. In the base case
+the AT1 hazard therefore splits into $1.72\%$ priced in Tier~2 and $0.47\%$ specific to
+the AT1. In spread terms, about $180$bp of the AT1 spread is priced in Tier~2, $50$bp is
+an AT1-specific premium, and $40$--$46$bp pays for the contract features: expected MDA
 coupon cuts ($\approx30$bp, an upper bound), mechanical conversion ($\approx4$bp)
-and extension ($6$--$15$bp, decreasing in the reset margin). Because the MDA component
-is an upper bound and the total is fixed by the market price, the AT1-specific premium
-is a lower bound.
+and extension ($6$--$15$bp, decreasing in the reset margin).
 
-The split survives three robustness checks. A reputational call rule raises the
-probability of a call at the first reset from $49$--$58\%$ to $77$--$81\%$, close to
-the levels practitioners quote, but moves neither the hazard nor its split. Every
-attribution that prices the hazard before the contract features gives the same
-$181/50$bp split. A two-piece resolution hazard bootstrapped from the two Tier~2 bonds
-($1.40\%$ to 2030, $2.10\%$ after) changes the Tier~2-priced component by less than
-5bp.
+The two parts of the hazard are not equally robust. The part priced in Tier~2 hardly
+moves with the capital dynamics: across the bootstrap interval of the speed of capital
+mean reversion it ranges from $1.61\%$ to $1.74\%$ a year. It also survives three
+further checks. A reputational call rule raises the probability of a call at the first
+reset from $49$--$58\%$ to $77$--$81\%$, close to the levels practitioners quote, but
+moves neither the hazard nor its split. Every attribution that prices the hazard before
+the contract features gives the same $181/50$bp split. A two-piece resolution hazard
+bootstrapped from the two Tier~2 bonds ($1.40\%$ to 2030, $2.10\%$ after) changes the
+Tier~2-priced component by less than 5bp. Across the admissible range of capital
+dynamics the Tier~2-priced component stays at $180$bp, and so does the $89$--$98$bp that
+each AT1 pays over it. The split of that excess does not: with slower capital rebuilding,
+expected MDA coupon cuts and extension take the place of the AT1-specific premium, which
+is zero at the historical estimate of mean reversion. The Tier~2 also restricts the
+capital dynamics: requiring the AT1 to be priced as at least as risky as BNP's Tier~2
+rules out mean reversion slower than $\kappa\approx0.17$, the lower half of its bootstrap
+interval. Over the range that history and this restriction jointly admit, the
+AT1-specific hazard lies between zero and about $0.5\%$ a year.
 
 Capital risk is a cliff, not a slope. At BNP's $13\%$ CET1 ratio the price moves by
 about $0.6$ points per point of capital; at the MDA threshold it moves by about four.
@@ -137,7 +147,7 @@ $2.0$ percentage points by 2028 at constant capital, not the distance to the tri
 The level of the capital stress depends strongly on the speed of capital mean
 reversion, which fifty quarters of history identify only to within a factor of eight;
 across that interval the price impact of the EBA adverse scenario ranges from $-7$ to
-$-38$ points.
+$-38$ points. The Tier~2 restriction narrows the range to about $-10$ to $-21$ points.
 
 \subsection{Related literature}
 

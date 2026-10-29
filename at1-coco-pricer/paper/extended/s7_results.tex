@@ -131,6 +131,13 @@ terms, is compensation that BNP's Tier~2 also earns; the remaining $22\%$ is wha
 charges for being an AT1 rather than a Tier~2. Over the 66 weekly dates the Tier~2 share
 ranges from $66\%$ to $80\%$, with a mean of $72\%$ (Figure~\ref{fig:capstruct}).
 
+The two halves of this split are not equally robust. The Tier~2-priced hazard hardly depends
+on the capital dynamics: re-solved on the paths of each value of $\kappa$ in its bootstrap
+interval, $\lres$ ranges only from $1.61\%$ to $1.74\%$ a year. The AT1-specific hazard
+absorbs almost all of the uncertainty about how fast the bank rebuilds capital, and is
+$0.47\%$ only in the base case; Section~\ref{sec:uncert} shows that it lies between zero and
+about $0.5\%$ over the range of $\kappa$ that history and the Tier~2 jointly admit.
+
 \begin{table}[H]
 \centering
 \begin{tabular}{lccccc}
@@ -190,10 +197,11 @@ sum to the total.}
 \label{fig:decomp}
 \end{figure}
 
-Two-thirds of the spread, about $180$bp, is priced in Tier~2 as well. Another $50$bp is the
-premium for being an AT1 rather than a Tier~2: the risk of a write-down without resolution,
-the equity-like, perpetual and discretionary profile, and the instrument's liquidity. The
-contract features explain the rest. Expected MDA coupon cuts cost about $30$bp. Conversion
+Two-thirds of the spread, about $180$bp, is priced in Tier~2 as well. In the base case
+another $50$bp is the premium for being an AT1 rather than a Tier~2: the risk of a write-down
+without resolution, the equity-like, perpetual and discretionary profile, and the
+instrument's liquidity. This component, unlike the first, depends on the speed of capital
+mean reversion (Section~\ref{sec:uncert}). The contract features explain the rest. Expected MDA coupon cuts cost about $30$bp. Conversion
 at the trigger, a $1.4$--$1.6\%$ lifetime event at a recovery of about a third, costs
 $4$bp. Extension costs $6$--$15$bp and decreases with the reset margin, as it should: the
 6.875\% has the lowest margin over today's AT1 spread and pays most for the issuer's option.
@@ -201,8 +209,12 @@ $4$bp. Extension costs $6$--$15$bp and decreases with the reset margin, as it sh
 The MDA component is an upper bound, for the reasons given in Section~\ref{sec:institutions}:
 the model applies the quartile factor to the coupon, while a bank inside its buffer would
 cut dividends, buy-backs and variable pay first. Because the total spread is fixed by the
-market price, an overstated MDA component is taken from the AT1-specific premium, so the
-$50$bp is a lower bound.
+market price, an overstated MDA component is taken from the AT1-specific premium: given
+$\kappa$, the $50$bp is a lower bound. Across values of $\kappa$ it is not. Slower capital
+rebuilding raises the MDA and extension components and lowers the premium, which is close
+to zero at the historical estimate of $\kappa$ (Table~\ref{tab:decompkappa}). What the
+market price pins down is their sum with conversion: the $89$--$98$bp that each AT1 pays
+over the Tier~2-priced risk.
 
 \subsection{Call and extension}
 
@@ -305,7 +317,8 @@ bonds is the distance to the MDA threshold, not the distance to the trigger.
 
 Table~\ref{tab:kappa} reports the headline results, averaged across the three bonds, at the
 two ends of the bootstrap interval for $\kappa$, at the maximum likelihood estimate and in the
-base case. Each column recalibrates the implied hazards.
+base case. Each column recalibrates the implied hazards of the AT1s and, on the same paths,
+the hazard of the Tier~2 anchor.
 
 \begin{table}[H]
 \centering
@@ -315,7 +328,10 @@ base case. Each column recalibrates the implied hazards.
  & (5\%) & (MLE) & (base) & (95\%) \\
 \midrule
 Half-life of a capital shock (years) & 11.0 & 4.2 & 2.0 & 1.5 \\
-Implied hazard (\%/yr) & 0.7 & 1.6 & 2.2 & 2.3 \\
+Implied hazard (\%/yr) & 0.66 & 1.64 & 2.20 & 2.33 \\
+\quad priced in Tier~2, $\lres$ (\%/yr) & 1.61 & 1.67 & 1.72 & 1.74 \\
+\quad AT1-specific, $\lspec$ (\%/yr) & $-0.95$ & $-0.03$ & 0.47 & 0.59 \\
+\quad Tier~2 share of the AT1 hazard & 244\% & 102\% & 78\% & 75\% \\
 MDA coupon cost (points) & 14.5 & 6.3 & 2.5 & 1.7 \\
 Capital delta at the MDA threshold (points/pp) & 13.7 & 8.8 & 4.2 & 2.8 \\
 EBA adverse shock (points) & $-37.7$ & $-21.4$ & $-10.5$ & $-7.3$ \\
@@ -325,14 +341,17 @@ Log-likelihood relative to MLE & $-0.5$ & 0 & $-1.5$ & $-4.1$ \\
 \bottomrule
 \end{tabular}
 \caption{Sensitivity to the speed of capital mean reversion (average of the three bonds).
-The capital delta at the threshold is the central difference over $\pm0.25$pp.}
+$\lres$ is re-implied from the Tier~2 2035NC34 on the paths of each column. The capital
+delta at the threshold is the central difference over $\pm0.25$pp.}
 \label{tab:kappa}
 \end{table}
 
 \begin{figure}[H]
 \centering\includegraphics[width=\textwidth]{parameter_uncertainty.png}
 \caption{Left: bootstrap of $(\kappa,\sigma)$. Centre: headline results across the
-$\kappa$ range. Right: cross-bond dispersion of the implied hazard against $\kappa$.}
+$\kappa$ range. Right: cross-bond dispersion of the implied hazard against $\kappa$ (left
+axis) and the AT1-specific hazard $\lspec$ (right axis); the dotted line marks
+$\lspec=0$.}
 \label{fig:uncert}
 \end{figure}
 
@@ -340,9 +359,63 @@ $\kappa$ range. Right: cross-bond dispersion of the implied hazard against $\kap
 bonds are more consistent with fast capital rebuilding: the dispersion falls from $7.8$bp at
 $\kappa=0.06$ to $2.3$bp at $0.48$ and then flattens. In price terms this is $0.6$ against
 $0.2$ points, around the bid--offer, so the evidence is a lean, not an identification. The
-history disfavours values much above $0.35$: the likelihood ratio statistic is $3.0$ at
-$0.35$ and $8.2$ at $0.48$. The base case sits where the two sources of information overlap,
-and is consistent with BNP's active capital management.
+history disfavours values much above $0.35$: the likelihood ratio statistic is $3.1$ at
+$0.35$ and $8.1$ at $0.48$, and crosses the $5\%$ critical value of $3.84$ at about
+$\kappa=0.37$.
+
+\paragraph{What the Tier~2 adds.} The Tier~2 anchor gives a sharper restriction than the
+cross-section of AT1s. Re-solved on the paths of each $\kappa$, the hazard priced in Tier~2
+barely moves, from $1.61\%$ a year at $\kappa=0.06$ to $1.74\%$ at $\kappa=0.48$, so the
+sensitivity to the capital dynamics falls almost entirely on the AT1-specific hazard. That
+hazard is negative below $\kappa\approx0.17$: when capital is slow to rebuild, the model
+attributes so much of the AT1's discount to expected MDA coupon cuts that the AT1 would be
+priced as less risky than BNP's own Tier~2, which the creditor hierarchy rules out.
+Requiring $\lspec\ge0$ excludes the lower half of the bootstrap interval and places the
+bound at $\kappa=0.171$ for the average of the three bonds ($0.175$ for each bond
+separately), a value that the history cannot distinguish from its maximum likelihood
+estimate. Together with the likelihood, the admissible range is $\kappa\in[0.17,0.37]$, a
+half-life of capital shocks between $1.9$ and $4.1$ years, over which $\lspec$ runs from zero
+to about $0.49\%$ a year. The base case $\kappa=0.35$ lies in the upper part of this range,
+where the cross-section of AT1s also points, and is consistent with BNP's active capital
+management.
+
+Table~\ref{tab:decompkappa} repeats the attribution of the spread at the two ends of the
+admissible range, with $\sigma$, the AT1 hazards and the Tier~2 hazard re-solved for each
+$\kappa$. The component priced in Tier~2 moves by less than half a basis point, and so does
+the total that the AT1 pays over it. What moves is the split of that total. At
+$\kappa=0.17$ the AT1-specific premium vanishes and its place is taken by expected coupon
+cuts and by extension: with slow capital rebuilding, CET1 is more often below the MDA
+threshold on a reset date, so the call is blocked more often and extension costs three
+times as much as in the base case. Between $\kappa=0.35$ and $\kappa=0.37$ the attribution
+hardly changes.
+
+\begin{table}[H]
+\centering
+\begin{tabular}{lccc}
+\toprule
+bp of yield-to-call spread & $\kappa=0.171$ & $\kappa=0.35$ (base) & $\kappa=0.37$ \\
+\midrule
+Priced in Tier~2 (resolution) & 180.1 & 180.5 & 180.5 \\
+AT1-specific premium & 1.0 & 49.8 & 52.3 \\
+MDA coupon cuts & 52.0 & 29.4 & 27.9 \\
+Conversion at the trigger & 6.7 & 4.3 & 4.1 \\
+Extension & 34.0 & 10.0 & 9.1 \\
+\midrule
+AT1 over Tier~2 (premium and contract features) & 93.8 & 93.4 & 93.4 \\
+Total $=$ market & 273.9 & 273.9 & 273.9 \\
+\bottomrule
+\end{tabular}
+\caption{Attribution of the yield-to-call spread (base order, average of the three bonds)
+at the ends of the range of $\kappa$ admitted by the CET1 history and the Tier~2
+restriction, and in the base case. Each column re-solves $\sigma$, the AT1 hazards and the
+Tier~2 hazard.}
+\label{tab:decompkappa}
+\end{table}
+
+Two caveats qualify the bound. It is conditional on the stylised MDA rule: because
+\eqref{eq:mda} overstates the expected coupon loss, and most so when capital is slow to
+rebuild, the true bound lies below $0.17$. And $\lspec=0$ is the weakest restriction the
+hierarchy imposes; any positive liquidity or equity premium on the AT1 would raise it.
 
 \paragraph{Where the uncertainty sits.} With a slower mean reversion a capital shock lasts
 longer, so more paths spend time inside the buffer: the MDA cost and the capital delta rise
@@ -351,9 +424,11 @@ re-calibrates each curve to today's price of the 6.875\%. All four agree at toda
 $13\%$ CET1, and diverge only as capital falls: at the MDA threshold the price ranges from
 $76$ ($\kappa=0.06$) to $93$ ($\kappa=0.48$), and at $6\%$ CET1 from $36$ to $77$. Bond prices
 identify the level of risk today, not the shape of the cliff. What is robust across the
-interval is the ordering of the three bonds, the extension ranking and the steepening of
-the capital delta near the threshold; the level of the capital stress and the split
-between the AT1-specific premium and the MDA component are not.
+interval is the hazard priced in Tier~2, the ordering of the three bonds, the extension
+ranking and the steepening of the capital delta near the threshold. The level of the
+capital stress and the split of the AT1's excess over the Tier~2 among the AT1-specific
+premium, the MDA component and extension are not; the Tier~2 restriction narrows their
+range but does not remove it.
 
 \begin{figure}[H]
 \centering\includegraphics[width=0.8\textwidth]{capital_cliff_uncertainty.png}

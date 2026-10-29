@@ -16,13 +16,18 @@ noise.
      + extension (issuer's call option)  = market spread
    The order matters a little (interactions); it follows the order above.
 
+1b. The same decomposition at the two ends of the range of kappa admitted by
+   the CET1 history and the Tier 2 restriction (lam_spec >= 0), with sigma,
+   the AT1 hazards and the Tier 2 hazard all re-solved for each kappa: how
+   much of each component depends on the speed of capital mean reversion.
+
 2. Call vs extension: P(call at first reset) as a function of the new-issue
    AT1 spread, and the price if the market prices "called" vs "extended".
 
 3. Stress scenarios and the price-CET1 profile.
 
-Outputs in ``results/``: spread_decomposition.(png|csv), call_probability.png,
-price_vs_cet1.png, stress_scenarios.csv.
+Outputs in ``results/``: spread_decomposition.(png|csv), spread_decomposition_kappa.csv,
+call_probability.png, price_vs_cet1.png, stress_scenarios.csv.
 """
 
 from __future__ import annotations
@@ -38,9 +43,10 @@ from scipy.optimize import brentq
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from calibrate_bnp import (  # noqa: E402
-    ANCHOR, BASE_SPREAD_VOL, COLOR, ORDER, RES, SENIOR_SHORT, SHORT, base_cet1_dynamics, market_panel,
-    resolution_hazards, senior_bonds, senior_panel, settings,
+    ANCHOR, BASE_SPREAD_VOL, COLOR, ONE_OFF_QUARTERS, ORDER, RES, SENIOR_SHORT, SHORT, base_cet1_dynamics,
+    load_cet1_series, market_panel, resolution_hazards, senior_bonds, senior_panel, settings,
 )
+from parameter_uncertainty import sigma_given_kappa  # noqa: E402
 
 from at1_coco import data as D  # noqa: E402
 from at1_coco.market import (  # noqa: E402
@@ -57,6 +63,22 @@ plt.rcParams.update({
     "axes.titlesize": 12, "axes.titleweight": "bold", "axes.titlelocation": "left",
     "legend.frameon": False,
 })
+
+# ends of the range of kappa admitted by the CET1 history (5% LR test) and the
+# Tier 2 restriction lam_spec >= 0 (parameter_uncertainty.py)
+KAPPA_CHECK = [0.171, 0.37]
+
+# order: premium first (so every later feature is valued with risky
+# discounting), extension last (valued with all other features in place)
+STAGES = [
+    ("risk-free to call", dict(call_rule="first", mda=False, conversion=False), False),
+    ("resolution risk (priced in T2)", dict(call_rule="first", mda=False, conversion=False), "res"),
+    ("AT1-specific premium", dict(call_rule="first", mda=False, conversion=False), True),
+    ("MDA coupon cuts", dict(call_rule="first", mda=True, conversion=False), True),
+    ("conversion", dict(call_rule="first", mda=True, conversion=True), True),
+    ("extension", dict(call_rule="model", mda=True, conversion=True), True),
+]
+COMPONENTS = [st[0] for st in STAGES[1:]]
 
 
 # ---------------------------------------------------------------------------
@@ -78,49 +100,23 @@ def price(prof, mkt, lam):
     return prof.dirty_price(cont_rate(mkt.discount_yield), lam)
 
 
-def main():
-    static = D.bonds_static()
-    bonds = {i: DatedAT1.from_row(i, static.loc[i]) for i in ORDER}
-    kappa, sigma = base_cet1_dynamics(verbose=True)
-    panel = market_panel(curve="fred")
-    long_run = float(panel.groupby("date")["refi"].first().mean())
-    last = panel[panel["date"] == panel["date"].max()].set_index("isin")
-    ms = settings(kappa, sigma, BASE_SPREAD_VOL, long_run)
-    randoms = default_randoms(n_paths=20_000)
+def decompose(bonds, mkts, ms, randoms, val_date, sp_last):
+    """Implied hazards and the sequential attribution of the spread under settings ``ms``.
 
-    mkts = {i: MarketState(r.date, r.clean, r.disc_yield, r.reset_ref, r.refi, r.cet1, r.share_usd)
-            for i, r in last.iterrows()}
+    Returns the long table of stages, the pivoted table of contributions (bp),
+    the implied AT1 hazards, the Tier 2 anchor hazard and all senior hazards.
+    """
     lam = {}
     for i in ORDER:
         lam[i], _ = implied_ponv(bonds[i], mkts[i], ms, randoms)
-    val_date = last["date"].iloc[0]
-    print("valuation date", val_date.date(), "| implied PONV", {SHORT[i]: round(100 * lam[i], 2) for i in ORDER})
-
-    # resolution hazard priced in BNP's Tier 2 (anchor bond, Markit recovery 20%)
-    sp = senior_panel(panel)
-    sp_last = sp[sp["date"] == val_date]
     lam_res_all = resolution_hazards(sp_last, senior_bonds(), ms, randoms)
     lam_res = lam_res_all[ANCHOR]
-    print("resolution hazard from T2/SNP:", {SENIOR_SHORT[i]: round(100 * v, 2) for i, v in lam_res_all.items()},
-          f"| anchor {100 * lam_res:.2f}%")
-
-    # 1. spread decomposition -------------------------------------------------
-    # order: premium first (so every later feature is valued with risky
-    # discounting), extension last (valued with all other features in place)
-    stages = [
-        ("risk-free to call", dict(call_rule="first", mda=False, conversion=False), False),
-        ("resolution risk (priced in T2)", dict(call_rule="first", mda=False, conversion=False), "res"),
-        ("AT1-specific premium", dict(call_rule="first", mda=False, conversion=False), True),
-        ("MDA coupon cuts", dict(call_rule="first", mda=True, conversion=False), True),
-        ("conversion", dict(call_rule="first", mda=True, conversion=True), True),
-        ("extension", dict(call_rule="model", mda=True, conversion=True), True),
-    ]
     rows = []
     for i in ORDER:
         b, m = bonds[i], mkts[i]
         base_y = None
         prev = 0.0
-        for name, kw, with_lam in stages:
+        for name, kw, with_lam in STAGES:
             prof = cash_flow_profile(b, m, ms, randoms, **kw)
             lam_k = min(lam_res, lam[i]) if with_lam == "res" else (lam[i] if with_lam else 0.0)
             d = price(prof, m, lam_k)
@@ -136,14 +132,69 @@ def main():
                          clean=m.clean_price, ytc=mkt_y, cum_spread_bp=1e4 * (mkt_y - base_y),
                          contribution_bp=np.nan))
     dec = pd.DataFrame(rows)
-    dec.to_csv(RES / "spread_decomposition.csv", index=False)
     tab = dec[dec.component != "risk-free to call"].pivot(index="component", columns="isin",
                                                          values="contribution_bp")[ORDER]
-    tab = tab.reindex([st[0] for st in stages[1:]])
+    tab = tab.reindex(COMPONENTS)
     tab.loc["total model"] = tab.sum()
     tab.loc["market YTC spread"] = dec[dec.component == "market"].set_index("isin")["cum_spread_bp"][ORDER]
+    return dec, tab, lam, lam_res, lam_res_all
+
+
+def main():
+    static = D.bonds_static()
+    bonds = {i: DatedAT1.from_row(i, static.loc[i]) for i in ORDER}
+    kappa, sigma = base_cet1_dynamics(verbose=True)
+    panel = market_panel(curve="fred")
+    long_run = float(panel.groupby("date")["refi"].first().mean())
+    last = panel[panel["date"] == panel["date"].max()].set_index("isin")
+    ms = settings(kappa, sigma, BASE_SPREAD_VOL, long_run)
+    randoms = default_randoms(n_paths=20_000)
+
+    mkts = {i: MarketState(r.date, r.clean, r.disc_yield, r.reset_ref, r.refi, r.cet1, r.share_usd)
+            for i, r in last.iterrows()}
+    val_date = last["date"].iloc[0]
+    sp = senior_panel(panel)
+    sp_last = sp[sp["date"] == val_date]
+
+    # 1. spread decomposition -------------------------------------------------
+    dec, tab, lam, lam_res, lam_res_all = decompose(bonds, mkts, ms, randoms, val_date, sp_last)
+    print("valuation date", val_date.date(), "| implied PONV", {SHORT[i]: round(100 * lam[i], 2) for i in ORDER})
+    # resolution hazard priced in BNP's Tier 2 (anchor bond, Markit recovery 20%)
+    print("resolution hazard from T2/SNP:", {SENIOR_SHORT[i]: round(100 * v, 2) for i, v in lam_res_all.items()},
+          f"| anchor {100 * lam_res:.2f}%")
+    dec.to_csv(RES / "spread_decomposition.csv", index=False)
     print("\nspread decomposition (bp of yield to first call over the Treasury):")
     print(tab.round(1).to_string())
+
+    # 1b. the same decomposition at the ends of the admissible range of kappa ---
+    c = load_cet1_series()
+    t_c = np.asarray((c.index - c.index[0]).days / 365.25)
+    keep = ~np.isin(c.index[1:], pd.to_datetime(ONE_OFF_QUARTERS))
+    runs = [(kappa, sigma, tab, lam, lam_res)]
+    for k in KAPPA_CHECK:
+        s_k = sigma_given_kappa(c.values, t_c, keep, k)
+        ms_k = settings(k, s_k, BASE_SPREAD_VOL, long_run)
+        _, tab_k, lam_k, lam_res_k, _ = decompose(bonds, mkts, ms_k, randoms, val_date, sp_last)
+        runs.append((k, s_k, tab_k, lam_k, lam_res_k))
+        print(f"  decomposition done: kappa={k:.3f} sigma={s_k:.3f}")
+    kap_rows = []
+    for k, s_k, tab_k, lam_k, lam_res_k in sorted(runs, key=lambda r: r[0]):
+        for i in ORDER:
+            row = dict(kappa=k, sigma=s_k, isin=i, bond=SHORT[i], lam_pct=100 * lam_k[i],
+                       lam_res_pct=100 * lam_res_k, lam_spec_pct=100 * (lam_k[i] - lam_res_k))
+            row.update({comp: tab_k.at[comp, i] for comp in COMPONENTS})
+            row["AT1 over Tier 2 (premium + features)"] = sum(tab_k.at[comp, i] for comp in COMPONENTS[1:])
+            row["premium + MDA"] = tab_k.at["AT1-specific premium", i] + tab_k.at["MDA coupon cuts", i]
+            row["total model"] = tab_k.at["total model", i]
+            row["market YTC spread"] = tab_k.at["market YTC spread", i]
+            kap_rows.append(row)
+    kap = pd.DataFrame(kap_rows)
+    kap.to_csv(RES / "spread_decomposition_kappa.csv", index=False)
+    show = COMPONENTS + ["AT1 over Tier 2 (premium + features)", "premium + MDA", "total model"]
+    print("\nspread decomposition across kappa (bp, per bond):")
+    print(kap.set_index(["kappa", "bond"])[["lam_res_pct", "lam_spec_pct"] + show].round(1).to_string())
+    print("\naverage of the three bonds (bp):")
+    print(kap.groupby("kappa")[["lam_res_pct", "lam_spec_pct"] + show].mean().round(1).T.to_string())
     subtitle = (f"{val_date:%d %b %Y} · base case κ={kappa:.2f}, σ={sigma:.2f}, "
                 f"spread vol {1e4*ms.spread.vol:.0f}bp · implied PONV "
                 + " / ".join(f"{100*lam[i]:.2f}%" for i in ORDER)

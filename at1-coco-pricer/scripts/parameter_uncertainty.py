@@ -9,6 +9,8 @@
    and 95th percentile of the bootstrap (sigma re-estimated given kappa) and
    recompute on the last date:
      - the implied PONV hazard of each bond,
+     - the hazard priced in the Tier 2 anchor (lam_res) and the AT1-specific
+       remainder (lam_spec = lam - lam_res), on the same paths and settings,
      - P(call at first reset),
      - the MDA coupon-cut component of the spread,
      - the capital delta at today's CET1 and just below the MDA threshold,
@@ -18,6 +20,9 @@
    Scan kappa (sigma re-fitted to history given kappa) and find the value that
    makes the three implied hazards most consistent: what bond prices say about
    how fast BNP rebuilds capital, to compare with the historical estimate.
+   On the same scan, re-solve lam_res from the Tier 2 anchor and report the
+   smallest kappa for which lam_spec >= 0: the AT1 cannot be priced as less
+   risky than BNP's own Tier 2, which bounds kappa from below.
 
 4. Capital cliff under each kappa: price of the most extension-exposed bond
    (6.875% NC33) against CET1, with its implied hazard re-solved per scenario.
@@ -45,16 +50,17 @@ import pandas as pd  # noqa: E402
 from scipy.optimize import minimize, minimize_scalar  # noqa: E402
 
 from calibrate_bnp import (  # noqa: E402
-    BASE_KAPPA, BASE_SPREAD_VOL, COLOR, ONE_OFF_QUARTERS, ORDER, RES, SHORT, fit_cet1_ou, load_cet1_series,
-    market_panel, settings,
+    ANCHOR, BASE_KAPPA, BASE_SPREAD_VOL, COLOR, ONE_OFF_QUARTERS, ORDER, RES, SHORT, fit_cet1_ou,
+    load_cet1_series, market_panel, resolution_hazards, senior_bonds, senior_panel, settings,
 )
 from at1_coco import data as D  # noqa: E402
 from at1_coco.market import (  # noqa: E402
-    DatedAT1, MarketState, cash_flow_profile, cont_rate, default_randoms, implied_ponv,
+    DatedAT1, MarketState, cash_flow_profile, cont_rate, default_randoms, hazard_state, implied_ponv,
 )
 
 THETA = 13.0
 N_BOOT = 1000
+KAPPA_GRID = [0.06, 0.10, 0.165, 0.20, 0.25, 0.30, 0.35, 0.48, 0.65, 0.9]
 
 
 # ---------------------------------------------------------------------------
@@ -97,10 +103,42 @@ def bootstrap(c: pd.Series, k_hat: float, s_hat: float, n: int = N_BOOT, seed: i
 
 
 # ---------------------------------------------------------------------------
+# Tier 2 anchor on the same paths
+# ---------------------------------------------------------------------------
+def t2_anchor_hazard(ms, randoms, day_row, sp_day, sen) -> float:
+    """lam_res implied by the Tier 2 anchor on the same state as the AT1s.
+
+    Same construction as capital_structure.py: one hazard state per date built
+    from the day's reset reference, refinancing spread, CET1 print and share
+    price, with the settings ``ms`` (hence the same kappa and sigma) and the
+    same random numbers as the AT1 pricing.
+    """
+    mkt = MarketState(day_row.date, np.nan, np.nan, day_row.reset_ref, day_row.refi, day_row.cet1,
+                      day_row.share_usd)
+    state = hazard_state(mkt, ms, randoms)
+    return float(resolution_hazards(sp_day, sen, ms, randoms, state=state)[ANCHOR])
+
+
+def zero_crossing(xs, ys) -> float:
+    """Smallest x at which ys crosses from negative to non-negative (linear interpolation).
+
+    Returns xs[0] if ys is already non-negative there, NaN if it never crosses.
+    """
+    xs, ys = np.asarray(xs, float), np.asarray(ys, float)
+    if np.isfinite(ys[0]) and ys[0] >= 0:
+        return float(xs[0])
+    for x0, y0, x1, y1 in zip(xs[:-1], ys[:-1], xs[1:], ys[1:]):
+        if np.isfinite(y0) and np.isfinite(y1) and y0 < 0 <= y1:
+            return float(x0 + (0 - y0) * (x1 - x0) / (y1 - y0))
+    return float("nan")
+
+
+# ---------------------------------------------------------------------------
 # 2. sensitivity of the headline results
 # ---------------------------------------------------------------------------
-def headline(kappa, sigma, bonds, last, long_run, randoms):
+def headline(kappa, sigma, bonds, last, long_run, randoms, sp_day, sen):
     ms = settings(kappa, sigma, BASE_SPREAD_VOL, long_run)
+    lam_res = t2_anchor_hazard(ms, randoms, last.iloc[0], sp_day, sen)
     rows = []
     for isin in ORDER:
         r = last.loc[isin]
@@ -123,6 +161,8 @@ def headline(kappa, sigma, bonds, last, long_run, randoms):
         at_mda_dn = px(replace(mkt, cet1=mda - 0.25))
         eba = px(replace(mkt, cet1=mkt.cet1 - 4.2)) - base
         rows.append(dict(isin=isin, implied_ponv_pct=100 * lam,
+                         lam_res_pct=100 * lam_res,
+                         lam_spec_pct=100 * (lam - lam_res),
                          p_call_first=prof.diagnostics["p_call_first"],
                          mda_cost_pts=mda_pts,
                          capital_delta_today=(up - dn) / 1.0,
@@ -155,14 +195,18 @@ def main():
 
     static = D.bonds_static()
     bonds = {i: DatedAT1.from_row(i, static.loc[i]) for i in ORDER}
+    sen = senior_bonds()
     panel = market_panel(curve="fred")
     long_run = float(panel.groupby("date")["refi"].first().mean())
-    last = panel[panel["date"] == panel["date"].max()].set_index("isin")
+    val_date = panel["date"].max()
+    last = panel[panel["date"] == val_date].set_index("isin")
+    sp = senior_panel(panel)
+    sp_day = sp[sp["date"] == val_date]
     randoms = default_randoms(n_paths=20_000)
 
     res = []
     for name, (k, s) in scen.items():
-        h = headline(k, s, bonds, last, long_run, randoms)
+        h = headline(k, s, bonds, last, long_run, randoms, sp_day, sen)
         h.insert(0, "scenario", name)
         h.insert(1, "kappa", k)
         h.insert(2, "sigma", s)
@@ -172,14 +216,17 @@ def main():
     res.to_csv(RES / "parameter_sensitivity.csv", index=False)
 
     summary = res.groupby("scenario", sort=False)[
-        ["kappa", "sigma", "implied_ponv_pct", "p_call_first", "mda_cost_pts",
+        ["kappa", "sigma", "implied_ponv_pct", "lam_res_pct", "lam_spec_pct", "p_call_first", "mda_cost_pts",
          "capital_delta_today", "capital_delta_at_mda", "eba_shock_pts"]].mean()
+    summary["t2_share"] = summary["lam_res_pct"] / summary["implied_ponv_pct"]
     print("\nheadline results, average of the three bonds:")
     print(summary.round(3).to_string())
 
     # 3. market-implied kappa ------------------------------------------------
+    s_mle = sigma_given_kappa(x, t, keep, k_hat)
+    ll_mle = -ou_nll(x, t, keep, k_hat, s_mle)
     scan = []
-    for k in [0.06, 0.10, 0.165, 0.25, 0.35, 0.48, 0.65, 0.9]:
+    for k in KAPPA_GRID:
         s_k = sigma_given_kappa(x, t, keep, k)
         ms = settings(k, s_k, BASE_SPREAD_VOL, long_run)
         lams = []
@@ -187,9 +234,19 @@ def main():
             r = last.loc[isin]
             mkt = MarketState(r.date, r.clean, r.disc_yield, r.reset_ref, r.refi, r.cet1, r.share_usd)
             lams.append(implied_ponv(bonds[isin], mkt, ms, randoms)[0])
+        lam_res = t2_anchor_hazard(ms, randoms, last.iloc[0], sp_day, sen)
+        lam_avg = float(np.mean(lams))
+        ll = -ou_nll(x, t, keep, k, s_k)
         scan.append(dict(kappa=k, sigma=s_k, dispersion_bp=1e4 * (max(lams) - min(lams)),
-                         mean_ponv_pct=100 * np.mean(lams),
-                         loglik_history=-ou_nll(x, t, keep, k, s_k)))
+                         mean_ponv_pct=100 * lam_avg,
+                         lam_res_pct=100 * lam_res,
+                         lam_spec_pct=100 * (lam_avg - lam_res),
+                         min_lam_spec_pct=100 * (min(lams) - lam_res),
+                         t2_share=lam_res / lam_avg,
+                         loglik_history=ll,
+                         lr_vs_mle=2 * (ll_mle - ll)))
+        print(f"  scan kappa={k:.3f}: lam={100*lam_avg:.2f}%  lam_res={100*lam_res:.2f}%  "
+              f"lam_spec={100*(lam_avg-lam_res):+.2f}%")
     scan = pd.DataFrame(scan)
     scan.to_csv(RES / "kappa_scan.csv", index=False)
     print("\nmarket-implied kappa scan (last date):")
@@ -200,6 +257,17 @@ def main():
     k_mkt = float(near["kappa"].min())
     print(f"bond prices favour kappa >= {k_mkt} (gap within 0.5bp of the best); "
           f"history: {k_hat:.3f}, 90% CI {q.loc[0.05,'kappa']:.3f}-{q.loc[0.95,'kappa']:.3f}")
+    # Tier 2 restriction: the AT1 cannot be cheaper in hazard than the Tier 2
+    k_floor = zero_crossing(scan["kappa"], scan["lam_spec_pct"])
+    k_floor_each = zero_crossing(scan["kappa"], scan["min_lam_spec_pct"])
+    if np.isfinite(k_floor):
+        s_f = sigma_given_kappa(x, t, keep, k_floor)
+        lr_f = 2 * (ll_mle + ou_nll(x, t, keep, k_floor, s_f))
+        print(f"Tier 2 restriction lam_spec >= 0 (average of the AT1s): kappa >= {k_floor:.3f} "
+              f"(half-life <= {np.log(2)/k_floor:.1f} years, LR vs MLE {lr_f:.2f}); "
+              f"for every AT1 separately: kappa >= {k_floor_each:.3f}")
+    else:
+        print("Tier 2 restriction lam_spec >= 0: never satisfied on the grid")
 
     # figure --------------------------------------------------------------
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.4))
@@ -222,15 +290,24 @@ def main():
     ax.set_title("Headline results across the kappa range", loc="left", fontweight="bold")
     ax.legend(frameon=False, fontsize=9)
     ax = axes[2]
-    ax.plot(scan["kappa"], scan["dispersion_bp"], "o-", color="#2a78d6", lw=2)
+    ax.plot(scan["kappa"], scan["dispersion_bp"], "o-", color="#2a78d6", lw=2, label="gap between the 3 AT1s")
     ax.axvspan(q.loc[0.05, "kappa"], q.loc[0.95, "kappa"], color="#52514e", alpha=0.12, lw=0,
                label="90% CI from history")
     ax.axvline(k_hat, color="#0b0b0b", lw=1, ls="--", label="historical estimate")
     ax.axvline(BASE_KAPPA, color="#2a78d6", lw=1.5, label="base case")
+    if np.isfinite(k_floor):
+        ax.axvline(k_floor, color="#eb6834", lw=1, ls=":", label=f"λ_spec = 0 at κ≈{k_floor:.2f}")
     ax.set_xlabel("kappa")
     ax.set_ylabel("gap between the 3 implied PONV (bp)")
     ax.set_title("What bond prices say about kappa", loc="left", fontweight="bold")
-    ax.legend(frameon=False, fontsize=9)
+    ax.legend(frameon=False, fontsize=8, loc="upper right")
+    ax2 = ax.twinx()
+    ax2.plot(scan["kappa"], scan["lam_spec_pct"], "s--", color="#eb6834", lw=1.4, ms=4)
+    ax2.axhline(0, color="#eb6834", lw=0.8, ls=":")
+    ax2.set_ylabel("AT1-specific hazard λ_spec (%/yr)", color="#eb6834")
+    ax2.tick_params(axis="y", colors="#eb6834")
+    ax2.spines["top"].set_visible(False)
+    ax2.grid(False)
     for a in axes:
         a.spines[["top", "right"]].set_visible(False)
         a.grid(color="#e4e3df", lw=0.6)

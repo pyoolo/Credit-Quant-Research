@@ -64,15 +64,18 @@ state. Because the creditor hierarchy makes Tier~2 exposed to the same resolutio
 as AT1, this splits the AT1 hazard into a part that Tier~2 also prices and an
 AT1-specific premium. Calibrated to BNP Paribas's three USD AT1s on 25 September 2026,
 the bonds imply a hazard of $2.19\%$ a year, equal across bonds to within the
-bid--offer; $1.72\%$ is priced in BNP's Tier~2 and $0.47\%$ is specific to the AT1.
-Of the $\approx 275$bp spread, about $180$bp is priced in Tier~2, $50$bp is an
-AT1-specific premium (a lower bound) and $40$--$46$bp are contract features: MDA coupon
-cuts, conversion and extension. The split is robust to a reputational call rule, to the
-order of attribution (Shapley values within blocks) and to a term structure of the
-resolution hazard. Prices are flat in capital above the MDA threshold and steep at it,
-so the risk-relevant distance is to the MDA threshold, not to the trigger. The speed of
-capital mean reversion is the weakest input and scales the capital stress results by a
-factor of five across its bootstrap interval.
+bid--offer, of which $1.72\%$ is priced in BNP's Tier~2. Of the $\approx 275$bp spread,
+about $180$bp is priced in Tier~2 as well, a figure that is robust to a reputational call
+rule, to the order of attribution, to a term structure of the resolution hazard and to
+the dynamics of capital. The remaining $90$--$100$bp, equally robust, pays for being an
+AT1 rather than a Tier~2: MDA coupon cuts, conversion, extension and an AT1-specific
+premium. How it divides among them depends on how fast the bank rebuilds capital, which
+history identifies poorly: the premium is about $50$bp in the base case and zero at the
+historical estimate, where coupon cuts and extension take its place. The Tier~2 restricts this dependence,
+because pricing the AT1 as safer than the Tier~2 would violate the creditor hierarchy;
+the restriction rules out the slower half of the plausible range of capital mean
+reversion. Prices are flat in capital above the MDA threshold and steep at it, so the
+risk-relevant distance is to the MDA threshold, not to the trigger.
 
 \medskip\noindent
 \textbf{Keywords:} contingent convertibles, AT1, CoCos, bank capital, MDA, point of

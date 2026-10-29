@@ -4,8 +4,9 @@
 
 \subsection{What the AT1-specific premium is}
 
-The AT1-specific hazard, $0.4$--$0.5\%$ a year, about $50$bp of spread, is the part of the
-AT1's compensation that BNP's Tier~2 does not earn. Proposition~\ref{prop:clocks} gives it a
+The AT1-specific hazard, $0.4$--$0.5\%$ a year in the base case, about $50$bp of spread, is
+the part of the AT1's compensation that BNP's Tier~2 does not earn and that the model's MDA
+rule does not explain. Proposition~\ref{prop:clocks} gives it a
 precise risk-neutral meaning: it is the intensity of write-downs that hit the AT1 without a
 resolution that also hits Tier~2, plus whatever premium investors attach to the instrument
 beyond its expected loss. Four components are plausible, and the model cannot separate them.
@@ -24,15 +25,22 @@ beyond its expected loss. Four components are plausible, and the model cannot se
   excluded from some benchmark indices.
 \end{enumerate}
 Because the MDA component is an upper bound, the $50$bp is a lower bound for these four
-together.
+together, given the speed of capital mean reversion. It is not a lower bound across values
+of that speed. With slower capital rebuilding, the model assigns more of the AT1's discount
+to expected MDA coupon cuts and to extension and less to these four components, and at the
+historical estimate it assigns them nothing (Table~\ref{tab:decompkappa}). What the data
+identify is the total that the AT1 pays over the Tier~2-priced risk, $89$--$98$bp, which
+does not move with the capital dynamics; its split rests on the capital dynamics and on
+the MDA rule, the two weakest parts of the model.
 
 \subsection{Implications}
 
 \paragraph{For investors.} Two-thirds of an AT1's spread is compensation that the same
 issuer's Tier~2 also pays, at a better recovery and without extension or coupon risk. The
-relevant relative-value question is therefore whether the AT1-specific $50$bp, plus the
-$40$--$46$bp of contract features, is adequate compensation for those features, not
-whether $275$bp is a high spread in absolute terms. The model provides a consistent way to
+relevant relative-value question is therefore whether the remaining $89$--$98$bp, the
+AT1-specific premium together with the contract features, is adequate compensation for
+those features, not whether $275$bp is a high spread in absolute terms. That total is
+better determined than its parts. The model provides a consistent way to
 make that comparison across issuers: calibrate $\lres$ to each issuer's Tier~2 and compare the
 residuals.
 
@@ -58,8 +66,11 @@ but not the hazard or its split.
   contains Tier~2's own premia.
   \item \textbf{Recovery.} The split depends on the Tier~2 recovery (Table~\ref{tab:recovery}).
   The market prices are consistent with the conventional $20\%$, but recovery is not observed.
-  \item \textbf{Capital mean reversion.} $\kappa$ is weakly identified, and the capital stress
-  results scale by a factor of five across its bootstrap interval.
+  \item \textbf{Capital mean reversion.} $\kappa$ is weakly identified by history, and the
+  capital stress results scale by a factor of five across its bootstrap interval. The
+  Tier~2 restriction $\lspec\ge0$ excludes the lower half of that interval and reduces the
+  factor to about two, but it is itself conditional on the stylised MDA rule. The
+  AT1-specific premium depends on $\kappa$; the Tier~2-priced hazard does not.
   \item \textbf{MDA mechanics.} Applying the quartile factor to the coupon overstates the MDA
   cost. The leverage-ratio and MREL MDAs, the available distributable items and supervisory
   discretion over distributions are not modelled.
@@ -108,10 +119,14 @@ hazard is unique and every comparative static is exact on a given set of paths.
 
 The implied hazard is not a black box. Because Tier~2 faces the same resolution event as AT1,
 pricing the issuer's Tier~2 on the same state splits the hazard into a part Tier~2 also
-prices and an AT1-specific premium. For BNP Paribas in September 2026, about four-fifths of
-the AT1 hazard and two-thirds of the spread are priced in Tier~2 as well, about $50$bp is
-specific to the AT1, and the contract features cost $40$--$46$bp. This split survives a
-reputational call rule, every attribution that prices the hazard before the contract
-features, and a term structure of the resolution hazard. What is not robust, and is reported
-with its range, is the level of capital stress, which depends on how fast the bank rebuilds
-capital after a shock.
+prices and an AT1-specific premium. For BNP Paribas in September 2026, about two-thirds of
+the spread, some $180$bp, is priced in Tier~2 as well. This part survives a reputational
+call rule, every attribution that prices the hazard before the contract features, a term
+structure of the resolution hazard and the range of capital dynamics that history and the
+Tier~2 jointly admit. The remaining $89$--$98$bp pays for being an AT1 rather than a Tier~2, and is
+equally robust. How it divides among expected MDA coupon cuts, extension and an
+AT1-specific premium depends on how fast the bank rebuilds capital after a shock: the
+premium is about $50$bp in the base case and zero at the historical estimate. The same dependence drives the level of the capital
+stress. The Tier~2 narrows both, because the creditor hierarchy forbids pricing the AT1 as
+safer than the Tier~2, but it does not remove them, and both are reported with their
+range.
